@@ -1,0 +1,33 @@
+{
+  "name": "ai-council-websocket-sdk",
+  "version": "0.1.0",
+  "description": "WebSocket SDK protocol implementation for AI Council with Claude Code",
+  "main": "websocket-server",
+  "scripts": {
+    "start": "bun run websocket-server",
+    "dev": "bun run --watch websocket-server",
+    "test": "bun run test-protocol.ts",
+    "test:integration": "bun run integration-test.ts",
+    "test:all": "bun run test && bun run test:integration",
+    "build": "bun build websocket-server --outfile dist/server.js",
+    "prepare": "bun install"
+  },
+  "keywords": [
+    "ai",
+    "websocket",
+    "claude",
+    "sdk",
+    "council",
+    "debate",
+    "multi-agent"
+  ],
+  "author": "AI Council",
+  "license": "MIT",
+  "dependencies": {
+    "hono": "^4.0.0",
+    "@hono/node-server": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}

@@ -1,0 +1,8 @@
+config/council.env
+output/
+logs/
+*.DS_Store
+*.tar.gz
+council-tui
+node_modules/
+dist/

@@ -1,0 +1,522 @@
+#!/usr/bin/env bun
+
+/**
+ * AI Council WebSocket Server
+ * WebSocket SDK protocol implementation for Claude Code
+ * Based on reverse-engineered protocol from The-Vibe-Company/companion
+ */
+
+import { Hono } from 'hono'
+import { serve } from '@hono/node-server'
+import { serveStatic } from '@hono/node-server/serve-static'
+import { upgradeWebSocket } from '@hono/node-server/ws'
+
+// Types from the reversed protocol
+type MessageType = 
+  | 'user' | 'system' | 'assistant' | 'result' | 'stream_event' 
+  | 'control_request' | 'control_response' | 'control_cancel_request'
+  | 'keep_alive' | 'tool_progress' | 'tool_use_summary' | 'auth_status'
+  | 'update_environment_variables'
+
+type ControlRequestSubtype = 
+  | 'initialize' | 'can_use_tool' | 'interrupt' | 'set_permission_mode'
+  | 'set_model' | 'set_max_thinking_tokens' | 'mcp_status' | 'mcp_message'
+  | 'mcp_reconnect' | 'mcp_toggle' | 'mcp_set_servers' | 'rewind_files'
+  | 'hook_callback'
+
+interface BaseMessage {
+  type: MessageType
+  session_id: string
+  uuid?: string
+}
+
+interface UserMessage extends BaseMessage {
+  type: 'user'
+  message: {
+    role: 'user'
+    content: string | ContentBlock[]
+  }
+  parent_tool_use_id: string | null
+}
+
+interface SystemInitMessage extends BaseMessage {
+  type: 'system'
+  subtype: 'init'
+  cwd: string
+  tools: string[]
+  model: string
+  permissionMode: string
+  session_id: string
+  uuid: string
+}
+
+interface AssistantMessage extends BaseMessage {
+  type: 'assistant'
+  message: {
+    id: string
+    type: 'message'
+    role: 'assistant'
+    model: string
+    content: ContentBlock[]
+    stop_reason: string | null
+    usage: {
+      input_tokens: number
+      output_tokens: number
+      cache_creation_input_tokens: number
+      cache_read_input_tokens: number
+    }
+  }
+  parent_tool_use_id: string | null
+  error?: string
+}
+
+interface ControlRequestMessage extends BaseMessage {
+  type: 'control_request'
+  request_id: string
+  request: {
+    subtype: ControlRequestSubtype
+    [key: string]: any
+  }
+}
+
+interface ControlResponseMessage extends BaseMessage {
+  type: 'control_response'
+  response: {
+    subtype: 'success' | 'error'
+    request_id: string
+    response?: any
+    error?: string
+  }
+}
+
+type ContentBlock = 
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+  | { type: 'tool_result'; tool_use_id: string; content: string | ContentBlock[]; is_error?: boolean }
+  | { type: 'thinking'; thinking: string; budget_tokens?: number }
+
+// Session management
+class SessionManager {
+  private sessions: Map<string, SessionState>
+  
+  constructor() {
+    this.sessions = new Map()
+  }
+  
+  createSession(sessionId: string, initData: SystemInitMessage): SessionState {
+    const state: SessionState = {
+      sessionId,
+      createdAt: new Date(),
+      lastActivity: new Date(),
+      model: initData.model,
+      tools: initData.tools,
+      permissionMode: initData.permissionMode,
+      cwd: initData.cwd,
+      messages: [],
+      pendingPermissionRequests: new Map(),
+      isActive: true
+    }
+    
+    this.sessions.set(sessionId, state)
+    return state
+  }
+  
+  getSession(sessionId: string): SessionState | undefined {
+    return this.sessions.get(sessionId)
+  }
+  
+  updateSession(sessionId: string, updates: Partial<SessionState>): SessionState | undefined {
+    const session = this.sessions.get(sessionId)
+    if (!session) return undefined
+    
+    Object.assign(session, updates)
+    session.lastActivity = new Date()
+    return session
+  }
+  
+  addPermissionRequest(sessionId: string, requestId: string, request: any): void {
+    const session = this.sessions.get(sessionId)
+    if (session) {
+      session.pendingPermissionRequests.set(requestId, request)
+    }
+  }
+  
+  resolvePermissionRequest(sessionId: string, requestId: string): void {
+    const session = this.sessions.get(sessionId)
+    if (session) {
+      session.pendingPermissionRequests.delete(requestId)
+    }
+  }
+  
+  addMessage(sessionId: string, message: any): void {
+    const session = this.sessions.get(sessionId)
+    if (session) {
+      session.messages.push(message)
+      session.lastActivity = new Date()
+    }
+  }
+}
+
+interface SessionState {
+  sessionId: string
+  createdAt: Date
+  lastActivity: Date
+  model: string
+  tools: string[]
+  permissionMode: string
+  cwd: string
+  messages: any[]
+  pendingPermissionRequests: Map<string, any>
+  isActive: boolean
+}
+
+// Permission engine
+class PermissionEngine {
+  constructor(private sessionManager: SessionManager) {}
+  
+  async handlePermissionRequest(sessionId: string, requestId: string, request: any): Promise<ControlResponseMessage> {
+    const session = this.sessionManager.getSession(sessionId)
+    if (!session) {
+      return this.createErrorResponse(requestId, 'Session not found')
+    }
+    
+    // Store the pending request
+    this.sessionManager.addPermissionRequest(sessionId, requestId, request)
+    
+    try {
+      // Implement your permission logic here
+      // For now, auto-approve everything (demo purposes)
+      const response = this.autoApproveStrategy(request)
+      
+      // Resolve the pending request
+      this.sessionManager.resolvePermissionRequest(sessionId, requestId)
+      
+      return this.createSuccessResponse(requestId, response)
+    } catch (error) {
+      return this.createErrorResponse(requestId, error instanceof Error ? error.message : 'Unknown error')
+    }
+  }
+  
+  private autoApproveStrategy(request: any): any {
+    // Simple auto-approve strategy - modify for your needs
+    return {
+      behavior: 'allow',
+      updatedInput: request.input || {},
+      updatedPermissions: []
+    }
+  }
+  
+  private createSuccessResponse(requestId: string, response: any): ControlResponseMessage {
+    return {
+      type: 'control_response',
+      session_id: '', // Will be filled by caller
+      response: {
+        subtype: 'success',
+        request_id: requestId,
+        response
+      }
+    }
+  }
+  
+  private createErrorResponse(requestId: string, error: string): ControlResponseMessage {
+    return {
+      type: 'control_response',
+      session_id: '', // Will be filled by caller
+      response: {
+        subtype: 'error',
+        request_id: requestId,
+        error
+      }
+    }
+  }
+}
+
+// Debate mode coordinator
+class DebateModeCoordinator {
+  constructor(private sessionManager: SessionManager) {}
+  
+  async startDebate(sessionId: string, agents: string[], initialPrompt: string): Promise<void> {
+    const session = this.sessionManager.getSession(sessionId)
+    if (!session) {
+      throw new Error('Session not found')
+    }
+    
+    // Implement debate cycle logic
+    // 1. Each agent takes a turn analyzing the problem
+    // 2. Agents review each other's work
+    // 3. Iterative refinement until consensus
+    
+    console.log(`Starting debate mode with agents: ${agents.join(', ')}`)
+    console.log(`Initial prompt: ${initialPrompt}`)
+    
+    // TODO: Implement actual debate coordination
+  }
+}
+
+// WebSocket message handler
+class WebSocketMessageHandler {
+  constructor(
+    private sessionManager: SessionManager,
+    private permissionEngine: PermissionEngine,
+    private debateCoordinator: DebateModeCoordinator
+  ) {}
+  
+  async handleMessage(ws: any, message: any, rawData: string): Promise<void> {
+    try {
+      const parsed = JSON.parse(rawData)
+      
+      // Add session_id if missing (for responses)
+      if (!parsed.session_id && message.session_id) {
+        parsed.session_id = message.session_id
+      }
+      
+      this.sessionManager.addMessage(parsed.session_id, parsed)
+      
+      switch (parsed.type) {
+        case 'system':
+          await this.handleSystemMessage(ws, parsed)
+          break
+        case 'assistant':
+          await this.handleAssistantMessage(ws, parsed)
+          break
+        case 'result':
+          await this.handleResultMessage(ws, parsed)
+          break
+        case 'stream_event':
+          await this.handleStreamEvent(ws, parsed)
+          break
+        case 'control_request':
+          await this.handleControlRequest(ws, parsed)
+          break
+        case 'keep_alive':
+          // Ignore keep-alive messages
+          break
+        default:
+          console.log(`Unhandled message type: ${parsed.type}`)
+      }
+    } catch (error) {
+      console.error('Error handling message:', error)
+    }
+  }
+  
+  private async handleSystemMessage(ws: any, message: SystemInitMessage): Promise<void> {
+    console.log(`System init received: session=${message.session_id}, model=${message.model}`)
+    
+    // Create or update session
+    const existingSession = this.sessionManager.getSession(message.session_id)
+    if (!existingSession) {
+      this.sessionManager.createSession(message.session_id, message)
+    } else {
+      this.sessionManager.updateSession(message.session_id, {
+        model: message.model,
+        tools: message.tools,
+        permissionMode: message.permissionMode
+      })
+    }
+    
+    // Send first user message (example)
+    const firstPrompt = {
+      type: 'user' as const,
+      message: {
+        role: 'user' as const,
+        content: 'Analyze this codebase and suggest improvements. Be thorough and provide specific recommendations.'
+      },
+      parent_tool_use_id: null,
+      session_id: message.session_id,
+      uuid: crypto.randomUUID()
+    }
+    
+    ws.send(JSON.stringify(firstPrompt) + '\n')
+  }
+  
+  private async handleAssistantMessage(ws: any, message: AssistantMessage): Promise<void> {
+    const content = message.message.content
+      .filter((block: ContentBlock) => block.type === 'text')
+      .map((block: any) => block.text)
+      .join(' ')
+    
+    console.log(`Assistant response: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`)
+    
+    // Check if this contains tool use that might need permission
+    const toolUses = content.match(/\b(tool_use|ToolUse)\b/i)
+    if (toolUses) {
+      console.log('Tool use detected in assistant response')
+    }
+  }
+  
+  private async handleResultMessage(ws: any, message: any): Promise<void> {
+    console.log(`Result received: ${message.subtype}, cost=$${message.total_cost_usd}, turns=${message.num_turns}`)
+    
+    if (message.is_error) {
+      console.error('Error result:', message.errors)
+    } else {
+      // Could start multi-turn conversation or debate mode here
+      // For now, just log and potentially send another user message
+      console.log('Query completed successfully')
+    }
+  }
+  
+  private async handleStreamEvent(ws: any, message: any): Promise<void> {
+    // Handle real-time streaming for TUI
+    // Extract text content and send to terminal
+    if (message.event && message.event.type === 'content_block_delta') {
+      const text = message.event.delta?.text
+      if (text) {
+        // In a real TUI, this would update the terminal display
+        process.stdout.write(text)
+      }
+    }
+  }
+  
+  private async handleControlRequest(ws: any, message: ControlRequestMessage): Promise<void> {
+    console.log(`Control request: ${message.request.subtype}`)
+    
+    switch (message.request.subtype) {
+      case 'can_use_tool':
+        await this.handlePermissionRequest(ws, message)
+        break
+      case 'initialize':
+        await this.handleInitializeRequest(ws, message)
+        break
+      case 'interrupt':
+        await this.handleInterruptRequest(ws, message)
+        break
+      default:
+        console.log(`Unhandled control request: ${message.request.subtype}`)
+    }
+  }
+  
+  private async handlePermissionRequest(ws: any, message: ControlRequestMessage): Promise<void> {
+    const response = await this.permissionEngine.handlePermissionRequest(
+      message.session_id,
+      message.request_id,
+      message.request
+    )
+    
+    // Fill in session_id
+    response.session_id = message.session_id
+    
+    ws.send(JSON.stringify(response) + '\n')
+  }
+  
+  private async handleInitializeRequest(ws: any, message: ControlRequestMessage): Promise<void> {
+    // Handle initialization control request
+    const response = {
+      type: 'control_response' as const,
+      session_id: message.session_id,
+      response: {
+        subtype: 'success' as const,
+        request_id: message.request_id,
+        response: {
+          // Return available commands, models, etc.
+          commands: [],
+          output_style: 'default',
+          available_output_styles: ['default', 'compact'],
+          models: [
+            { value: 'claude-3-opus-20240229', displayName: 'Claude 3 Opus', description: 'Most powerful model' },
+            { value: 'claude-3-sonnet-20240229', displayName: 'Claude 3 Sonnet', description: 'Balanced model' }
+          ],
+          account: {}
+        }
+      }
+    }
+    
+    ws.send(JSON.stringify(response) + '\n')
+  }
+  
+  private async handleInterruptRequest(ws: any, message: ControlRequestMessage): Promise<void> {
+    const response = {
+      type: 'control_response' as const,
+      session_id: message.session_id,
+      response: {
+        subtype: 'success' as const,
+        request_id: message.request_id,
+        response: {}
+      }
+    }
+    
+    ws.send(JSON.stringify(response) + '\n')
+  }
+}
+
+// Main server setup
+function createServer() {
+  const app = new Hono()
+  
+  // Shared state
+  const sessionManager = new SessionManager()
+  const permissionEngine = new PermissionEngine(sessionManager)
+  const debateCoordinator = new DebateModeCoordinator(sessionManager)
+  const messageHandler = new WebSocketMessageHandler(sessionManager, permissionEngine, debateCoordinator)
+  
+  // WebSocket upgrade endpoint
+  app.get('/ws', (c) => {
+    const success = upgradeWebSocket(c, (ws) => {
+      console.log('New WebSocket connection established')
+      
+      ws.on('message', async (data, rawData) => {
+        try {
+          // Handle NDJSON - multiple messages can be in one WebSocket message
+          const lines = rawData.toString().split('\n').filter(Boolean)
+          
+          for (const line of lines) {
+            if (line.trim()) {
+              const message = JSON.parse(line)
+              await messageHandler.handleMessage(ws, message, line)
+            }
+          }
+        } catch (error) {
+          console.error('Error processing WebSocket message:', error)
+        }
+      })
+      
+      ws.on('close', () => {
+        console.log('WebSocket connection closed')
+      })
+      
+      ws.on('error', (error) => {
+        console.error('WebSocket error:', error)
+      })
+    })
+    
+    if (!success) {
+      return c.text('WebSocket upgrade failed', 400)
+    }
+    
+    return new Response(null, { status: 101 })
+  })
+  
+  // Health check endpoint
+  app.get('/health', (c) => {
+    return c.json({ status: 'healthy', activeSessions: Array.from(sessionManager['sessions'].keys()).length })
+  })
+  
+  // Static files for any UI
+  app.use('/static/*', serveStatic({ root: './public' }))
+  
+  return app
+}
+
+// Start the server
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8765
+const app = createServer()
+
+console.log(`AI Council WebSocket Server starting on port ${PORT}`)
+console.log(`WebSocket URL: ws://localhost:${PORT}/ws`)
+console.log('')
+console.log('To connect Claude Code:')
+console.log(`claude --sdk-url ws://localhost:${PORT}/ws \\
+  --print \\
+  --output-format stream-json \\
+  --input-format stream-json \\
+  --verbose \\
+  -p ""`)
+
+serve({
+  fetch: app.fetch,
+  port: PORT
+}, (info) => {
+  console.log(`Server listening on http://localhost:${info.port}`)
+})
+
+export {}
