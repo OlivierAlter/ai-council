@@ -45,6 +45,7 @@ type Model struct {
     AgentViewports map[types.AgentID]*viewport.Model
     SynthViewport  viewport.Model
     Spinners       map[types.AgentID]spinner.Model
+    PanelBuffers   map[types.AgentID]*PanelBuffer
 
     Session *types.SessionState
 
@@ -62,6 +63,7 @@ func InitialModel(cfg Config, eventChan <-chan tea.Msg) Model {
     agents := make(map[types.AgentID]*types.AgentState)
     agentViewports := make(map[types.AgentID]*viewport.Model)
     spinners := make(map[types.AgentID]spinner.Model)
+    panelBuffers := make(map[types.AgentID]*PanelBuffer)
 
     for _, id := range types.AgentOrder {
         agents[id] = &types.AgentState{ID: id, Status: types.StatusPending}
@@ -70,6 +72,7 @@ func InitialModel(cfg Config, eventChan <-chan tea.Msg) Model {
         s := spinner.New()
         s.Spinner = spinner.Dot
         spinners[id] = s
+        panelBuffers[id] = NewPanelBuffer(id)
     }
 
     return Model{
@@ -78,6 +81,7 @@ func InitialModel(cfg Config, eventChan <-chan tea.Msg) Model {
         PromptInput:    ta,
         AgentViewports: agentViewports,
         Spinners:       spinners,
+        PanelBuffers:   panelBuffers,
         Session: &types.SessionState{
             Agents: agents,
         },

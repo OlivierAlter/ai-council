@@ -56,13 +56,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
             Text: msg.Line, Stream: msg.Stream, Timestamp: now,
         })
         agent.LastOutputAt = &now
-        agent.Stream = append(agent.Stream, msg.Line)
-        if len(agent.Stream) > 500 {
-            agent.Stream = agent.Stream[len(agent.Stream)-500:]
+        // Route through PanelBuffer for foreground/background awareness
+        if buf, ok := m.PanelBuffers[msg.Agent]; ok {
+            buf.Append(msg.Line)
         }
-        if vp, ok := m.AgentViewports[msg.Agent]; ok {
-            vp.SetContent(strings.Join(agent.Stream, "\n"))
-            vp.GotoBottom()
+        // Update viewport if this agent is currently foregrounded
+        if m.isAgentFocused(msg.Agent) {
+            if vp, ok := m.AgentViewports[msg.Agent]; ok {
+                if buf, ok := m.PanelBuffers[msg.Agent]; ok {
+                    vp.SetContent(buf.Content())
+                }
+                vp.GotoBottom()
+            }
         }
         return m, m.WaitForEvent()
 
@@ -113,21 +118,25 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
         }
 
     case ModeRunning, ModeComplete:
+        var newPanel FocusedPanel = -1
         switch msg.String() {
         case "ctrl+c":
             return m, tea.Quit
         case "tab":
-            m.FocusedPanel = (m.FocusedPanel + 1) % 6
+            newPanel = (m.FocusedPanel + 1) % 6
         case "shift+tab":
-            m.FocusedPanel = (m.FocusedPanel - 1 + 6) % 6
-        case "1": m.FocusedPanel = PanelClaude
-        case "2": m.FocusedPanel = PanelCodex
-        case "3": m.FocusedPanel = PanelGemini
-        case "4": m.FocusedPanel = PanelVibe
-        case "5", "s": m.FocusedPanel = PanelSynthesis
-        case "0": m.FocusedPanel = PanelOverview
+            newPanel = (m.FocusedPanel - 1 + 6) % 6
+        case "1": newPanel = PanelClaude
+        case "2": newPanel = PanelCodex
+        case "3": newPanel = PanelGemini
+        case "4": newPanel = PanelVibe
+        case "5", "s": newPanel = PanelSynthesis
+        case "0": newPanel = PanelOverview
         case "q":
             return m, tea.Quit
+        }
+        if newPanel >= 0 && newPanel != m.FocusedPanel {
+            m.switchPanel(newPanel)
         }
     }
     return m, nil
@@ -161,4 +170,46 @@ func (m Model) WaitForEvent() tea.Cmd {
     return func() tea.Msg {
         return <-m.EventChan
     }
+}
+
+// switchPanel handles the foreground/background transition with catchup.
+func (m *Model) switchPanel(newPanel FocusedPanel) {
+    // Background the old panel's agent
+    if agent, ok := m.panelToAgent(m.FocusedPanel); ok {
+        if buf, ok := m.PanelBuffers[agent]; ok {
+            buf.SetBackground()
+        }
+    }
+
+    m.FocusedPanel = newPanel
+
+    // Foreground the new panel's agent and flush catchup
+    if agent, ok := m.panelToAgent(newPanel); ok {
+        if buf, ok := m.PanelBuffers[agent]; ok {
+            buf.SetForeground()
+            // Refresh viewport with full ring buffer content (includes catchup)
+            if vp, ok := m.AgentViewports[agent]; ok {
+                vp.SetContent(buf.Content())
+                vp.GotoBottom()
+            }
+        }
+    }
+}
+
+// panelToAgent maps a FocusedPanel to its AgentID. Returns false for
+// non-agent panels (Overview, Synthesis).
+func (m *Model) panelToAgent(panel FocusedPanel) (types.AgentID, bool) {
+    switch panel {
+    case PanelClaude:  return types.AgentClaude, true
+    case PanelCodex:   return types.AgentCodex, true
+    case PanelGemini:  return types.AgentGemini, true
+    case PanelVibe:    return types.AgentVibe, true
+    }
+    return "", false
+}
+
+// isAgentFocused returns true if the given agent's panel is currently visible.
+func (m *Model) isAgentFocused(agent types.AgentID) bool {
+    focused, ok := m.panelToAgent(m.FocusedPanel)
+    return ok && focused == agent
 }
