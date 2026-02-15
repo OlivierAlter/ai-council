@@ -88,6 +88,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
         m.FocusedPanel = PanelSynthesis
         return m, nil
 
+    case msgs.AgentIdleMsg:
+        if agent, ok := m.Session.Agents[msg.Agent]; ok {
+            agent.IsIdle = true
+        }
+        return m, m.WaitForEvent()
+
+    case msgs.AgentStalledMsg:
+        if agent, ok := m.Session.Agents[msg.Agent]; ok {
+            agent.IsStalled = true
+        }
+        return m, m.WaitForEvent()
+
+    case msgs.AgentIdleClearedMsg:
+        if agent, ok := m.Session.Agents[msg.Agent]; ok {
+            agent.IsIdle = false
+            agent.IsStalled = false
+        }
+        return m, m.WaitForEvent()
+
     case msgs.ErrorMsg:
         // Handle error
         return m, nil

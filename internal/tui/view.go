@@ -75,6 +75,12 @@ func (m Model) overviewGrid() string {
         if agent.Usage != nil {
             content += fmt.Sprintf("\nTokens: %d", agent.Usage.InputTokens+agent.Usage.OutputTokens)
         }
+        // Show idle/stalled warning
+        if agent.IsStalled {
+            content += "\nSTALLED - no output"
+        } else if agent.IsIdle {
+            content += "\nidle - waiting..."
+        }
         // Show catchup indicator if there's unread output
         if buf, ok := m.PanelBuffers[id]; ok && buf.HasCatchup() {
             content += fmt.Sprintf("\n+%d new lines", buf.CatchupCount())

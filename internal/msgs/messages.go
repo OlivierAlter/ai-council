@@ -34,6 +34,21 @@ type SynthesisStartedMsg struct{}
 type SynthesisChunkMsg struct{ Text string }
 type SynthesisCompleteMsg struct{ Result *types.SynthesisResult }
 
+// Idle detection messages
+type AgentIdleMsg struct {
+    Agent    types.AgentID
+    Duration time.Duration
+}
+
+type AgentStalledMsg struct {
+    Agent    types.AgentID
+    Duration time.Duration
+}
+
+type AgentIdleClearedMsg struct {
+    Agent types.AgentID
+}
+
 // System messages
 type TickMsg time.Time
 type ErrorMsg struct{ Err error }

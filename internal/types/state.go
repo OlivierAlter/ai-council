@@ -112,6 +112,8 @@ type AgentState struct {
 	StartTime    time.Time
 	EndTime      *time.Time
 	LastOutputAt *time.Time    // Tracks last output for idle detection
+	IsIdle       bool          // No output for idle threshold
+	IsStalled    bool          // No output for stalled threshold
 	Output       []OutputLine  // Full log
 	Stream       []string      // Ring buffer for UI (last N lines)
 	FinalJSON    string        // Parsed final result
