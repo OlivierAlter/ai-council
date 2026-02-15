@@ -668,6 +668,14 @@ ai-council/
 │   │   ├── debate.go            # Debate mode: round-based cross-review (Phase 3)
 │   │   └── synthesizer.go       # Invoke Claude on host for synthesis
 │   │
+│   ├── scheduler/
+│   │   ├── scheduler.go         # Scheduler interface + task CRUD + config persistence
+│   │   ├── cron.go              # Cron expression parsing + validation
+│   │   ├── darwin.go            # macOS launchd plist generation + management
+│   │   ├── linux.go             # Linux crontab manipulation
+│   │   ├── worktree.go          # Git worktree create/commit/push/cleanup for scheduled runs
+│   │   └── history.go           # Execution history tracking (per-task logs, status, duration)
+│   │
 │   ├── graph/
 │   │   ├── graph.go             # Task graph: parse, validate, topo-sort
 │   │   ├── executor.go          # Wave-based DAG execution with state tracking
@@ -722,6 +730,9 @@ council "Fix the auth bug"                    # CLI mode: run and print result
 council "Fix the auth bug" --tui              # TUI mode: interactive Bubble Tea UI
 council "Fix the auth bug" --collab           # Collab mode (CLI or TUI)
 council "Fix the auth bug" --debate --rounds 3  # Debate mode (Phase 3)
+council schedule add "Review commits" --cron "0 9 * * 1-5"  # Scheduled runs
+council schedule list                         # List scheduled tasks
+council schedule history                      # View execution history
 ```
 
 **`agent.Agent` interface:**
@@ -869,12 +880,22 @@ No more `cat "${SCRIPT_DIR}/prompts/..."` — prompts are compiled into the bina
 17. Add `tui/panels/` for agent, overview, synthesis, graph panels
 18. **Verification**: `council "test" --tui` shows live agent output without `council.sh`
 
+#### Phase 2d: Scheduled Council Runs
+19. `internal/scheduler/scheduler.go` — `ScheduledTask` type, config persistence to `~/.claude/council-schedules.json`
+20. `internal/scheduler/cron.go` — cron expression parsing + validation (use `adhocore/gronx` or similar)
+21. `internal/scheduler/darwin.go` — launchd plist generation, `launchctl load/unload`
+22. `internal/scheduler/linux.go` — marker-based crontab manipulation
+23. `internal/scheduler/worktree.go` — git worktree lifecycle (create → run → commit → push → cleanup)
+24. `internal/scheduler/history.go` — per-task execution log (timestamp, status, duration, output path)
+25. `cmd/council/schedule.go` — `council schedule add|remove|list|history|run` subcommands
+26. **Verification**: `council schedule add "Review commits" --cron "0 9 * * 1-5" --agents claude,codex --worktree` creates launchd plist; task fires on schedule and produces output in `output/`
+
 #### Phase 3: WebSocket SDK + Debate Mode
-19. `internal/sdk/` — WebSocket server, NDJSON codec, session state, permissions
-20. `internal/agent/websocket.go` — `WebSocketAgent` implementation
-21. `internal/orchestrator/debate.go` — round-based cross-review orchestration
-22. `tui/panels/debate.go` — debate mode visualization
-23. **Verification**: `council "Design X" --debate --rounds 3` with Claude via WebSocket
+27. `internal/sdk/` — WebSocket server, NDJSON codec, session state, permissions
+28. `internal/agent/websocket.go` — `WebSocketAgent` implementation
+29. `internal/orchestrator/debate.go` — round-based cross-review orchestration
+30. `tui/panels/debate.go` — debate mode visualization
+31. **Verification**: `council "Design X" --debate --rounds 3` with Claude via WebSocket
 
 ### Dependencies to Add
 
@@ -884,6 +905,7 @@ require (
     github.com/gorilla/websocket v1.5.3     // Phase 3: WebSocket SDK
     github.com/spf13/cobra v1.8.1           // Better CLI than flag (subcommands, help)
     github.com/spf13/viper v1.19.0          // Config file loading (council.conf)
+    github.com/adhocore/gronx v1.8.1        // Phase 2d: Cron expression parsing + validation
 )
 ```
 
@@ -906,6 +928,198 @@ Keep forever:
 - `Containerfile`
 - `config/` files
 - `prompts/` (embedded into binary via `go:embed`)
+
+---
+
+## Scheduled Council Runs (Phase 2d)
+
+Absorb scheduling into the Go binary so the full multi-agent council (not just Claude) can run on a cron schedule. Inspired by [jshchnz/claude-code-scheduler](https://github.com/jshchnz/claude-code-scheduler) but council-aware.
+
+### Why Not Use claude-code-scheduler Directly?
+
+claude-code-scheduler runs `claude -p "prompt"` — a single Claude instance. The council runs 2-4 agents in parallel inside containers, then synthesizes. Scheduling `council.sh` via a raw crontab works but misses the scheduler's UX benefits (task management, history, worktree isolation). Absorbing the scheduling logic into the Go binary gives us both.
+
+### CLI Interface
+
+```bash
+# Add a recurring task — full council, all agents
+council schedule add "Review yesterday's commits for bugs and security issues" \
+  --cron "0 9 * * 1-5" \
+  --agents claude,codex \
+  --mode standard \
+  --worktree
+
+# Add a one-time task (runs once, then self-removes)
+council schedule add "Audit all dependencies for CVEs" \
+  --once "2026-02-20T09:00:00" \
+  --agents claude,codex,gemini \
+  --mode collab
+
+# Add with natural language schedule (Claude interprets → cron expression)
+council schedule add "Check for broken links in docs" \
+  --every "Sunday at midnight"
+
+# List scheduled tasks
+council schedule list
+# ID          CRON            NEXT RUN              AGENTS          MODE      WORKTREE
+# sec-review  0 9 * * 1       2026-02-17 09:00:00   claude,codex    standard  yes
+# dep-audit   (once)          2026-02-20 09:00:00   claude,codex,…  collab    no
+# link-check  0 0 * * 0       2026-02-16 00:00:00   claude          standard  no
+
+# View execution history
+council schedule history
+council schedule history sec-review          # specific task
+council schedule history --last 5            # last 5 runs across all tasks
+
+# Run a scheduled task immediately (for testing)
+council schedule run sec-review
+
+# Remove a task
+council schedule remove sec-review
+
+# Pause/resume without removing
+council schedule pause sec-review
+council schedule resume sec-review
+```
+
+### Scheduled Task Config
+
+Persisted to `~/.claude/council-schedules.json` (global) or `.claude/council-schedules.json` (project-level):
+
+```json
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": "sec-review",
+      "prompt": "Review yesterday's commits for bugs and security issues",
+      "cron": "0 9 * * 1-5",
+      "agents": ["claude", "codex"],
+      "mode": "standard",
+      "workspace": "/Users/user/projects/myapp",
+      "worktree": true,
+      "worktreeRemote": "origin",
+      "worktreeBranchPrefix": "council-scheduled/",
+      "timeout": 600,
+      "enabled": true,
+      "createdAt": "2026-02-15T21:00:00Z"
+    }
+  ]
+}
+```
+
+### Platform Scheduler Integration
+
+Each task registers with the native OS scheduler. The council binary is invoked at the scheduled time — no long-running daemon needed.
+
+**macOS (launchd):**
+```xml
+<!-- ~/Library/LaunchAgents/com.council.schedule.sec-review.plist -->
+<dict>
+    <key>Label</key>
+    <string>com.council.schedule.sec-review</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/council</string>
+        <string>schedule</string>
+        <string>run</string>
+        <string>sec-review</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key><integer>9</integer>
+        <key>Minute</key><integer>0</integer>
+        <!-- Weekdays via multiple dicts -->
+    </dict>
+    <key>StandardOutPath</key>
+    <string>~/.claude/logs/council-schedule-sec-review.log</string>
+    <key>StandardErrorPath</key>
+    <string>~/.claude/logs/council-schedule-sec-review.error.log</string>
+</dict>
+```
+
+**Linux (crontab):**
+```
+# council-schedule:sec-review
+0 9 * * 1-5 /usr/local/bin/council schedule run sec-review >> ~/.claude/logs/council-schedule-sec-review.log 2>&1
+```
+
+### Git Worktree Mode for Scheduled Runs
+
+When `--worktree` is enabled, scheduled runs produce code changes on isolated branches instead of modifying the workspace directly:
+
+```
+1. council schedule run sec-review
+2. Create worktree: ~/.council-worktrees/sec-review-1708000000/
+3. Branch: council-scheduled/sec-review-2026-02-16
+4. Run full council pipeline inside worktree
+5. If changes exist:
+   a. Commit with message: "[council-scheduled] sec-review: Review yesterday's commits"
+   b. Push to remote
+   c. Clean up worktree
+6. If no changes: clean up worktree silently
+7. If push fails: preserve worktree for manual review, log warning
+```
+
+This pairs with the container sandbox model: containers limit what can execute at runtime, worktrees limit what gets committed to the repo. Two independent layers of isolation.
+
+### Execution Flow
+
+```
+council schedule run <task-id>
+    │
+    ├─ Load task config from council-schedules.json
+    ├─ Validate: task exists, enabled, workspace accessible
+    ├─ If worktree: create isolated worktree + branch
+    │
+    ├─ Run council pipeline (reuses existing orchestrator):
+    │   ├─ standard mode → orchestrator.Standard.Run()
+    │   ├─ collab mode   → orchestrator.Collab.Run()
+    │   └─ (future) debate mode → orchestrator.Debate.Run()
+    │
+    ├─ Save output to output/<session>/ (same format as manual runs)
+    ├─ Record execution in history (status, duration, output path)
+    │
+    ├─ If worktree + changes: commit → push → cleanup
+    ├─ If one-time task: unregister from OS scheduler, remove from config
+    │
+    └─ Exit (no long-running process)
+```
+
+### Key Design Decisions
+
+- **No daemon**: Each scheduled run is a fresh `council schedule run` invocation. The OS scheduler handles timing. No PID files, no process management, no orphan risk.
+- **Full council pipeline**: Scheduled tasks run the same multi-agent + synthesis pipeline as interactive use. Not a degraded single-agent mode.
+- **Output compatibility**: Scheduled runs write to the same `output/<session>/` structure. The TUI and `--serve` API can display them alongside manual runs.
+- **Task ID validation**: IDs are alphanumeric + hyphens only (`^[a-zA-Z0-9-]+$`). No path traversal, no crontab injection. This addresses the security flaw found in claude-code-scheduler where under-validated task IDs could escape log directories or inject into crontab entries.
+- **Worktree branch naming**: Deterministic (`council-scheduled/<task-id>-<date>`) to avoid collision and enable easy filtering in PR lists.
+- **History retention**: Keep last 100 execution records per task. Older records aged out. Log files follow the same rotation policy as manual runs.
+
+### Security Considerations
+
+| Concern | Mitigation |
+|---------|-----------|
+| Scheduled task runs with full permissions | Container sandbox limits blast radius; worktree isolates commits |
+| Task config tampering | Validate on load with strict schema; enforce `0600` file permissions |
+| Crontab/plist injection via task ID | Strict alphanumeric regex validation on task IDs |
+| Credential availability at scheduled time | `ensure_claude_oauth_token()` runs at execution time; falls back to API key |
+| Runaway scheduled tasks | Per-task timeout (default from `council.conf`); OS scheduler won't overlap if previous run hasn't finished (launchd default behavior) |
+| Disk exhaustion from worktrees | Max concurrent worktrees limit; cleanup on success; alert on cleanup failure |
+
+### Lessons from claude-code-scheduler
+
+The [claude-code-scheduler](https://github.com/jshchnz/claude-code-scheduler) project (v0.2.0, ~2,700 lines TypeScript, 149 tests) was analyzed by the AI Council. Key takeaways incorporated:
+
+**Adopted:**
+- Native OS scheduler integration (launchd/crontab) — no daemon
+- Git worktree isolation as an output mode
+- Execution history tracking with per-task logs
+- Strict input validation for task IDs and paths (fixing their path traversal bug)
+
+**Not adopted:**
+- Natural language → cron via Claude (nice UX but adds latency + cost to task creation — offer as `--every` convenience flag, store resolved cron)
+- Single-agent execution (our whole point is multi-agent)
+- `--dangerously-skip-permissions` as a per-task toggle (containers are the sandbox boundary — permissions are always bypassed inside containers, never on the host)
 
 ---
 
