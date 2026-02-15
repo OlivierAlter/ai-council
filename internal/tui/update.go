@@ -38,17 +38,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
         m.Session.StartTime = time.Now()
         return m, m.WaitForEvent()
 
+    case msgs.AgentStartingMsg:
+        agent := m.Session.Agents[msg.Agent]
+        agent.Transition(types.StatusStarting)
+        agent.StartTime = msg.Time
+        return m, m.WaitForEvent()
+
     case msgs.AgentStartedMsg:
         agent := m.Session.Agents[msg.Agent]
-        agent.Status = types.StatusRunning
-        agent.StartTime = msg.Time
+        agent.Transition(types.StatusRunning)
         return m, m.WaitForEvent()
 
     case msgs.AgentOutputMsg:
         agent := m.Session.Agents[msg.Agent]
+        now := time.Now()
         agent.Output = append(agent.Output, types.OutputLine{
-            Text: msg.Line, Stream: msg.Stream, Timestamp: time.Now(),
+            Text: msg.Line, Stream: msg.Stream, Timestamp: now,
         })
+        agent.LastOutputAt = &now
         agent.Stream = append(agent.Stream, msg.Line)
         if len(agent.Stream) > 500 {
             agent.Stream = agent.Stream[len(agent.Stream)-500:]
@@ -61,10 +68,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
     case msgs.AgentCompletedMsg:
         agent := m.Session.Agents[msg.Agent]
-        agent.Status = msg.Status
+        agent.Transition(msg.Status)
         agent.Usage = msg.Usage
-        now := time.Now()
-        agent.EndTime = &now
         return m, m.WaitForEvent()
 
     case msgs.SynthesisStartedMsg:

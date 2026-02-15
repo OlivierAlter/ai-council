@@ -6,6 +6,11 @@ import (
 )
 
 // Agent lifecycle messages
+type AgentStartingMsg struct {
+    Agent types.AgentID
+    Time  time.Time
+}
+
 type AgentStartedMsg struct {
     Agent types.AgentID
     Time  time.Time

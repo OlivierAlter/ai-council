@@ -97,6 +97,13 @@ func (e *Executor) parseEvent(line string) tea.Msg {
         // Parse agents string back to slice
         return msgs.SessionStartedMsg{ID: d.ID, Prompt: d.Prompt}
 
+    case "agent.starting":
+        var d struct {
+            Agent types.AgentID `json:"agent"`
+        }
+        json.Unmarshal(ev.Data, &d)
+        return msgs.AgentStartingMsg{Agent: d.Agent, Time: ts}
+
     case "agent.started":
         var d struct {
             Agent types.AgentID `json:"agent"`
@@ -120,8 +127,15 @@ func (e *Executor) parseEvent(line string) tea.Msg {
             Usage  *types.TokenUsage `json:"usage"`
         }
         json.Unmarshal(ev.Data, &d)
-        status := types.StatusCompleted
-        if d.Status != "success" {
+        var status types.AgentStatus
+        switch d.Status {
+        case "success":
+            status = types.StatusCompleted
+        case "timeout":
+            status = types.StatusTimedOut
+        case "killed":
+            status = types.StatusKilled
+        default:
             status = types.StatusFailed
         }
         return msgs.AgentCompletedMsg{Agent: d.Agent, Status: status, Usage: d.Usage}
