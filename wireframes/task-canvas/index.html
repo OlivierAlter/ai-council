@@ -170,7 +170,7 @@
   /* ---------- Wireframe notes ---------- */
   .notes {
     position: absolute; top: 72px; right: 16px;
-    width: 280px; max-height: calc(100% - 240px); overflow: auto;
+    width: 280px; max-height: calc(100% - 270px); overflow: auto;
     background: rgba(13, 18, 32, 0.92); border: 1px solid var(--line); border-radius: 10px;
     padding: 14px 16px; backdrop-filter: blur(8px);
     font-size: 12.5px; color: var(--muted);
@@ -193,6 +193,36 @@
     .top-right { top: 70px; left: 16px; right: auto; }
     .hide-sm { display: none; }
   }
+  /* ---------- Stacks ---------- */
+  .topic.stack-front { border-top-left-radius: 0; }
+  .topic.buried { cursor: pointer; overflow: hidden; background: var(--surface-2); border-color: var(--line-strong); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4); }
+  .topic.buried > * { visibility: hidden; }
+  .topic.buried:hover { border-color: var(--accent); }
+  .topic.drop-target { outline: 2px dashed var(--accent); outline-offset: 5px; }
+  .topic.drop-target::after {
+    content: "Drop to stack";
+    position: absolute; left: 50%; top: -34px; transform: translateX(-50%);
+    font: 500 11px var(--mono); color: var(--void); background: var(--accent);
+    padding: 3px 8px; border-radius: 5px; white-space: nowrap;
+  }
+  .stack-tab {
+    position: absolute; height: 27px; box-sizing: border-box;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 4px 0 8px;
+    background: var(--surface-2); border: 1px solid var(--line); border-bottom: 0;
+    border-radius: 8px 8px 0 0;
+    font: 500 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums;
+    cursor: grab; user-select: none; white-space: nowrap;
+  }
+  .stack-tab.dragging { cursor: grabbing; }
+  .stack-tab .grip { color: var(--faint); letter-spacing: -2px; }
+  .stack-tab b { color: var(--text); font-weight: 500; }
+  .tab-btn {
+    border: 0; background: none; color: var(--muted); cursor: pointer;
+    font: 500 11px var(--mono); padding: 3px 6px; border-radius: 5px;
+  }
+  .tab-btn:hover { background: var(--line); color: var(--text); }
+
   @media (prefers-reduced-motion: reduce) {
     .topic, .t-bar i { transition: none; }
   }
@@ -236,6 +266,13 @@
       <li>Double-click a topic name to rename it</li>
       <li>Type in "Add task" and press <kbd>Enter</kbd></li>
       <li>Select a topic and press <kbd>Delete</kbd> to remove it</li>
+    </ul>
+    <h3>Stacks</h3>
+    <ul>
+      <li>Drop a topic onto another to stack them</li>
+      <li>Drag the stack's tab (or the top card of a pile) to move the whole stack</li>
+      <li>Click a card's edge in a pile to bring it to the top</li>
+      <li>Expand a pile into a column; drag a card out of the column to unstack it</li>
       <li>Click the minimap to jump around</li>
     </ul>
     <h3>Open questions</h3>
@@ -265,7 +302,7 @@
 <script>
 (function () {
   const COLORS = ["--c-blue", "--c-amber", "--c-mint", "--c-rose", "--c-violet"];
-  const STORE_KEY = "orbit-wireframe-v1";
+  const STORE_KEY = "orbit-wireframe-v2";
   const css = getComputedStyle(document.documentElement);
   const colorOf = (v) => css.getPropertyValue(v).trim();
 
@@ -295,12 +332,20 @@
         { t: "Quarterly VAT filing", done: false },
         { t: "Renew passport", done: false },
       ]},
+      { id: 6, title: "Reading list", x: 808, y: 128, color: "--c-blue", tasks: [
+        { t: "Pricing strategy notes", done: false },
+        { t: "Spatial UI essays", done: true },
+      ]},
     ],
     links: [[1, 2], [3, 4], [1, 4]],
+    stacks: [{ id: 1, x: 800, y: 120, members: [5, 6], collapsed: true }],
   });
 
   let data = load() || sample();
+  data.stacks = data.stacks || [];
   let nextId = Math.max(0, ...data.topics.map(t => t.id)) + 1;
+  let nextStackId = Math.max(0, ...data.stacks.map(s => s.id)) + 1;
+  const tabs = new Map();
   const view = data.view || { x: 0, y: 0, s: 1 };
   let selected = null;
 
@@ -434,36 +479,48 @@
       li.querySelector(".del").addEventListener("click", () => { t.tasks.splice(i, 1); renderCard(t); updateStats(); drawLinks(); save(); });
       ul.appendChild(li);
     });
+    const s = stackOf(t.id);
+    if (s) layoutStack(s);
   }
 
   function wireCard(el, t) {
     const head = el.querySelector(".t-head");
     const title = el.querySelector(".t-title");
 
-    el.addEventListener("pointerdown", (e) => { e.stopPropagation(); select(t.id); });
+    el.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      if (el.classList.contains("buried")) { bringToTop(t.id); save(); }
+      select(t.id);
+    });
 
     head.addEventListener("pointerdown", (e) => {
-      if (title.getAttribute("contenteditable") === "true") return;
-      e.preventDefault();
-      head.setPointerCapture(e.pointerId);
-      const start = { px: e.clientX, py: e.clientY, x: t.x, y: t.y };
-      el.classList.add("dragging");
-      const move = (ev) => {
-        t.x = start.x + (ev.clientX - start.px) / view.s;
-        t.y = start.y + (ev.clientY - start.py) / view.s;
-        el.style.left = t.x + "px"; el.style.top = t.y + "px";
-        drawLinks(); drawMinimap();
-      };
-      const up = () => {
-        el.classList.remove("dragging");
-        head.removeEventListener("pointermove", move);
-        head.removeEventListener("pointerup", up);
-        head.removeEventListener("pointercancel", up);
-        save();
-      };
-      head.addEventListener("pointermove", move);
-      head.addEventListener("pointerup", up);
-      head.addEventListener("pointercancel", up);
+      if (e.button !== 0 || title.getAttribute("contenteditable") === "true") return;
+      const s = stackOf(t.id);
+      // A collapsed pile moves as one; a card in an expanded column comes out.
+      if (s && s.collapsed) { dragStack(e, head, s); return; }
+      let ox, oy;
+      dragGesture(e, head, {
+        start() {
+          if (s) detach(t.id);
+          ox = t.x; oy = t.y;
+          el.classList.add("dragging");
+          el.style.zIndex = 100000;
+        },
+        move(dx, dy, ev) {
+          t.x = ox + dx; t.y = oy + dy;
+          el.style.left = t.x + "px"; el.style.top = t.y + "px";
+          drawLinks(); drawMinimap();
+          highlightTarget(findTarget(ev, [t.id]));
+        },
+        end(ev) {
+          el.classList.remove("dragging");
+          el.style.zIndex = ++zTop;
+          const target = findTarget(ev, [t.id]);
+          highlightTarget(null);
+          if (target != null) joinStack(target, [t.id]);
+          save();
+        },
+      });
     });
 
     title.addEventListener("dblclick", (e) => { e.stopPropagation(); editTitle(el, t); });
@@ -503,7 +560,198 @@
     selected = id;
     for (const [cid, el] of cards) el.classList.toggle("selected", cid === id);
     const el = cards.get(id);
-    if (el) el.style.zIndex = ++zTop;
+    if (el && !stackOf(id)) el.style.zIndex = ++zTop;
+  }
+
+  /* ---------- Drag helper (4px threshold so clicks stay clicks) ---------- */
+  function dragGesture(e, handle, h) {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    const sx = e.clientX, sy = e.clientY;
+    let started = false;
+    const move = (ev) => {
+      if (!started) {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
+        started = true; h.start();
+      }
+      h.move((ev.clientX - sx) / view.s, (ev.clientY - sy) / view.s, ev);
+    };
+    const up = (ev) => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      if (started) h.end(ev);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  }
+
+  /* ---------- Stacks ---------- */
+  const topicById = (id) => data.topics.find(t => t.id === id);
+  const stackOf = (id) => data.stacks.find(s => s.members.includes(id));
+
+  function resetCard(id) {
+    const el = cards.get(id);
+    if (!el) return;
+    el.classList.remove("buried", "stack-front");
+    el.style.height = "";
+    el.style.zIndex = ++zTop;
+  }
+
+  function getTab(s) {
+    let tab = tabs.get(s.id);
+    if (tab) return tab;
+    tab = document.createElement("div");
+    tab.className = "stack-tab";
+    tab.innerHTML = `<span class="grip" aria-hidden="true">::::</span><span class="lbl"></span>
+      <button class="tab-btn toggle" type="button"></button><button class="tab-btn unstack" type="button">Unstack</button>`;
+    world.appendChild(tab);
+    tabs.set(s.id, tab);
+    tab.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      if (e.button !== 0 || e.target.closest("button")) return;
+      dragStack(e, tab, s);
+    });
+    tab.addEventListener("dblclick", (e) => e.stopPropagation());
+    tab.querySelector(".toggle").addEventListener("click", () => {
+      s.collapsed = !s.collapsed; layoutStack(s); drawLinks(); drawMinimap(); save();
+    });
+    tab.querySelector(".unstack").addEventListener("click", () => unstack(s));
+    return tab;
+  }
+
+  function layoutStack(s) {
+    if (s.members.some(id => !cards.get(id))) return;
+    const front = cards.get(s.members[0]);
+    s.members.forEach(id => { const el = cards.get(id); el.classList.remove("buried", "stack-front"); el.style.height = ""; });
+    const frontH = front.offsetHeight;
+    const zb = (zTop += s.members.length + 2);
+    let y = s.y;
+    s.members.forEach((id, i) => {
+      const t = topicById(id), el = cards.get(id);
+      if (s.collapsed) {
+        const o = Math.min(i, 3) * 9;
+        t.x = s.x + o; t.y = s.y + o;
+        if (i > 0) { el.classList.add("buried"); el.style.height = frontH + "px"; }
+      } else {
+        t.x = s.x; t.y = y;
+        y += el.offsetHeight + 12;
+      }
+      el.style.left = t.x + "px"; el.style.top = t.y + "px";
+      el.style.zIndex = zb - i;
+    });
+    front.classList.add("stack-front");
+    const tab = getTab(s);
+    tab.style.left = s.x + "px";
+    tab.style.top = (s.y - 26) + "px";
+    tab.style.zIndex = zb + 1;
+    const open = s.members.reduce((n, id) => n + topicById(id).tasks.filter(k => !k.done).length, 0);
+    tab.querySelector(".lbl").innerHTML = `Stack <b>${s.members.length}</b> &middot; ${open} open`;
+    tab.querySelector(".toggle").textContent = s.collapsed ? "Expand" : "Collapse";
+  }
+
+  function renderStacks() {
+    for (const [id, tab] of tabs) {
+      if (!data.stacks.some(s => s.id === id)) { tab.remove(); tabs.delete(id); }
+    }
+    data.stacks.forEach(layoutStack);
+    drawLinks(); drawMinimap(); updateStats();
+  }
+
+  function dissolveIfSmall(s) {
+    if (s.members.length >= 2) return;
+    s.members.forEach(resetCard);
+    data.stacks = data.stacks.filter(k => k !== s);
+  }
+
+  function detach(id) {
+    const s = stackOf(id);
+    if (!s) return;
+    s.members = s.members.filter(m => m !== id);
+    resetCard(id);
+    dissolveIfSmall(s);
+    renderStacks();
+  }
+
+  function joinStack(targetId, ids, fromStack) {
+    if (fromStack) data.stacks = data.stacks.filter(k => k !== fromStack);
+    const target = topicById(targetId);
+    let s = stackOf(targetId);
+    if (s) {
+      if (s.collapsed) s.members = [...ids, ...s.members];
+      else s.members.splice(s.members.indexOf(targetId) + 1, 0, ...ids);
+    } else {
+      s = { id: nextStackId++, x: target.x, y: target.y, members: [...ids, targetId], collapsed: true };
+      data.stacks.push(s);
+    }
+    renderStacks();
+  }
+
+  function dragStack(e, handle, s) {
+    let ox, oy;
+    const els = () => s.members.map(id => cards.get(id)).concat(getTab(s));
+    dragGesture(e, handle, {
+      start() { ox = s.x; oy = s.y; els().forEach(el => el.classList.add("dragging")); },
+      move(dx, dy, ev) {
+        s.x = ox + dx; s.y = oy + dy;
+        layoutStack(s); drawLinks(); drawMinimap();
+        highlightTarget(findTarget(ev, s.members));
+      },
+      end(ev) {
+        els().forEach(el => el.classList.remove("dragging"));
+        const target = findTarget(ev, s.members);
+        highlightTarget(null);
+        if (target != null) joinStack(target, s.members.slice(), s);
+        save();
+      },
+    });
+  }
+
+  function bringToTop(id) {
+    const s = stackOf(id);
+    if (!s) return;
+    s.members = [id, ...s.members.filter(m => m !== id)];
+    layoutStack(s); drawLinks(); drawMinimap();
+  }
+
+  function unstack(s) {
+    const x0 = s.x, y0 = s.y;
+    data.stacks = data.stacks.filter(k => k !== s);
+    s.members.forEach((id, i) => {
+      const t = topicById(id);
+      t.x = x0 + i * 272; t.y = y0;
+      resetCard(id);
+      const el = cards.get(id);
+      el.style.left = t.x + "px"; el.style.top = t.y + "px";
+    });
+    renderStacks(); save();
+  }
+
+  // Topic id under the pointer that the dragged thing would stack onto.
+  function findTarget(ev, exclude) {
+    for (const node of document.elementsFromPoint(ev.clientX, ev.clientY)) {
+      const card = node.closest && node.closest(".topic");
+      if (card) {
+        const id = +card.dataset.id;
+        if (!exclude.includes(id)) { const s = stackOf(id); return s && s.collapsed ? s.members[0] : id; }
+        continue;
+      }
+      const tab = node.closest && node.closest(".stack-tab");
+      if (tab) {
+        const s = data.stacks.find(k => tabs.get(k.id) === tab);
+        if (s && !s.members.some(m => exclude.includes(m))) return s.members[0];
+      }
+    }
+    return null;
+  }
+
+  let hovered = null;
+  function highlightTarget(id) {
+    if (hovered === id) return;
+    if (hovered != null && cards.get(hovered)) cards.get(hovered).classList.remove("drop-target");
+    hovered = id;
+    if (id != null) cards.get(id).classList.add("drop-target");
   }
 
   function drawLinks() {
@@ -637,11 +885,13 @@
   document.getElementById("addTopic").onclick = () => { const c = toWorld(...centerScreen()); addTopic(c.x, c.y); };
   document.getElementById("reset").onclick = () => {
     for (const el of cards.values()) el.remove();
-    cards.clear();
+    for (const tab of tabs.values()) tab.remove();
+    cards.clear(); tabs.clear();
     data = sample();
-    nextId = 6;
+    nextId = Math.max(...data.topics.map(t => t.id)) + 1;
+    nextStackId = Math.max(0, ...data.stacks.map(s => s.id)) + 1;
     data.topics.forEach(renderCard);
-    drawLinks(); updateStats(); fitAll();
+    renderStacks(); fitAll();
   };
   const notes = document.getElementById("notes");
   const toggle = document.getElementById("toggleNotes");
@@ -655,6 +905,7 @@
     if (e.key === "Delete" || e.key === "Backspace") {
       if (selected == null) return;
       const id = selected;
+      detach(id);
       data.topics = data.topics.filter(t => t.id !== id);
       data.links = data.links.filter(([a, b]) => a !== id && b !== id);
       cards.get(id).remove(); cards.delete(id); selected = null;
@@ -665,10 +916,9 @@
   /* ---------- Boot ---------- */
   sizeStars();
   data.topics.forEach(renderCard);
-  drawLinks();
-  updateStats();
+  renderStacks();
   if (data.view) applyView(); else fitAll();
   window.addEventListener("resize", () => { sizeStars(); applyView(); });
-  document.fonts && document.fonts.ready.then(() => { drawLinks(); drawMinimap(); });
+  document.fonts && document.fonts.ready.then(renderStacks);
 })();
 </script>
