@@ -117,7 +117,8 @@
   .picker input[type="color"] { width: 32px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: none; cursor: pointer; }
   .picker .p-reset { width: 100%; margin-top: 10px; text-align: left; }
   .picker .p-reset[aria-pressed="true"] { color: var(--text); background: var(--surface-2); }
-  .g-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; border-radius: 3px; }
+  .g-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; border-radius: 3px; cursor: text; }
+  .row .nm[contenteditable="true"] { background: var(--surface-2); outline: 1px solid var(--line-strong); padding: 0 4px; text-overflow: clip; }
   .g-name[contenteditable="true"] { background: var(--surface-2); outline: 1px solid var(--line-strong); padding: 0 4px; cursor: text; }
   .g-label .spacer { flex: 1; }
   .tab-btn {
@@ -153,6 +154,37 @@
   }
   .t-title[contenteditable="true"] { background: var(--surface-2); outline: 1px solid var(--line-strong); padding: 0 4px; cursor: text; user-select: text; text-overflow: clip; }
   .t-count { font: 500 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  /* Finished tasks become stars in the topic header */
+  .t-stars {
+    flex: none; display: flex; align-items: center; gap: 1px;
+    border: 0; background: none; padding: 2px 4px; border-radius: 5px; cursor: pointer;
+    color: var(--accent); font: 500 11px var(--mono); font-variant-numeric: tabular-nums;
+  }
+  .t-stars:hover { background: var(--line); }
+  .t-stars .st { font-size: 10px; line-height: 1; text-shadow: 0 0 6px var(--accent); }
+  .t-stars .more { color: var(--muted); margin-left: 3px; }
+  .t-stars.twinkle .st:last-of-type { animation: twinkle .7s ease-out; }
+  @keyframes twinkle { 0% { transform: scale(2.4); filter: brightness(2); } 100% { transform: scale(1); } }
+  .t-alldone {
+    position: absolute; inset: 36px 6px 6px; display: grid; place-content: center; text-align: center; gap: 2px;
+    font-size: 12px; color: var(--muted);
+  }
+  .t-alldone b { color: var(--accent); font-size: 18px; letter-spacing: 3px; text-shadow: 0 0 10px var(--accent); }
+  .cell.completing { animation: implode .45s ease-in forwards; }
+  @keyframes implode { to { transform: scale(.15); opacity: 0; border-radius: 50%; } }
+  .fly-star {
+    position: fixed; z-index: 1001; pointer-events: none; left: 0; top: 0;
+    color: var(--accent); font-size: 16px; line-height: 1; text-shadow: 0 0 12px var(--accent), 0 0 4px #fff;
+    transition: transform .6s cubic-bezier(.3, .7, .2, 1), opacity .6s;
+  }
+  .done-list { display: grid; gap: 2px; max-height: 220px; overflow: auto; margin: 0 -4px; }
+  .done-row { display: flex; align-items: flex-start; gap: 8px; padding: 5px 6px; border-radius: 6px; color: var(--muted); font-size: 12.5px; }
+  .done-row:hover { background: var(--surface-2); color: var(--text); }
+  .done-row .st { color: var(--accent); text-shadow: 0 0 6px var(--accent); }
+  .done-row span:nth-child(2) { flex: 1; text-decoration: line-through; }
+  .done-row button { border: 0; background: none; color: var(--muted); font: 500 11px var(--mono); cursor: pointer; padding: 0 4px; border-radius: 4px; }
+  .done-row button:hover { color: var(--text); background: var(--line); }
+  .picker .p-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font: 400 11px var(--mono); color: var(--faint); }
   .t-plus {
     flex: none; width: 22px; height: 22px; border: 0; border-radius: 5px; background: none;
     color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1;
@@ -343,6 +375,8 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .tile { transition: none; }
+    .cell.completing, .t-stars.twinkle .st { animation: none; }
+    .fly-star { display: none; }
     .tile.flash { animation: none; }
   }
 </style>
@@ -390,13 +424,13 @@
     <h3>Try it</h3>
     <ul>
       <li>Start typing anywhere to add a task: <kbd>Call the bank @ Admin</kbd>. After <kbd>@</kbd>, pick a topic with <kbd>&uarr;</kbd> <kbd>&darr;</kbd> and <kbd>Tab</kbd></li>
-      <li>Tick a task's checkbox; the map re-balances</li>
+      <li>Tick a task and it turns into a star in its topic's header, freeing its space. Click the stars to see or reopen finished tasks</li>
       <li>Click <kbd>+</kbd> on a topic to add tasks, <kbd>Enter</kbd> to keep adding</li>
       <li>Drag a topic's header onto another topic to group them</li>
       <li>Drag a topic onto the top bar to take it out of its group</li>
       <li>Double-click a tile to zoom in; small cells show their text as you zoom</li>
       <li>Drag or scroll to pan; <kbd>&#8984;</kbd> + scroll (<kbd>Ctrl</kbd> on Windows) or pinch to zoom</li>
-      <li>Double-click a topic or group name to rename it</li>
+      <li>Double-click a topic or group name (on the map or in the List) to rename it</li>
       <li>Click any colour dot (on a topic, a group, or in the List) to change its colour</li>
       <li>Select a topic and press <kbd>Delete</kbd> to remove it</li>
     </ul>
@@ -497,7 +531,8 @@
   const openCount = (t) => t.tasks.filter(k => !k.done).length;
   function weightOf(t) {
     const open = openCount(t), done = t.tasks.length - open;
-    return data.sizeBy === "open" ? open + done * 0.25 + 0.5 : t.tasks.length + 0.5;
+    // Finished tasks take no room in "open" mode; they live on as stars in the header.
+    return data.sizeBy === "open" ? open + 0.5 : t.tasks.length + 0.5;
   }
   const groupWeight = (g) => g.members.reduce((s, id) => s + weightOf(topicById(id)), 0);
 
@@ -549,7 +584,7 @@
     const path = document.createElement("div");
     path.className = "map-path";
     const open = data.topics.reduce((n, t) => n + openCount(t), 0);
-    path.innerHTML = `<b>All topics</b><span>${data.topics.length} topics</span><span>${open} open tasks</span><span>sized by ${data.sizeBy === "open" ? "open" : "all"} tasks</span>`;
+    path.innerHTML = `<b>All topics</b><span>${data.topics.length} topics</span><span>${open} open tasks</span><span>\u2726 ${data.topics.reduce((n, t) => n + t.tasks.length - openCount(t), 0)} done</span><span>sized by ${data.sizeBy === "open" ? "open" : "all"} tasks</span>`;
     mapEl.appendChild(path);
 
     const items = [
@@ -608,12 +643,12 @@
     el.title = `${t.title} · ${open} open of ${t.tasks.length}`;
 
     if (showHead) {
-      el.innerHTML = `<div class="t-head"><button class="t-dot" type="button" aria-label="Change colour" title="Change colour"></button><span class="t-title"></span><span class="t-count">${t.tasks.length - open}/${t.tasks.length}</span><button class="t-plus" type="button" aria-label="Add task">+</button></div><div class="t-bar"><i></i></div>`;
+      el.innerHTML = `<div class="t-head"><button class="t-dot" type="button" aria-label="Change colour" title="Change colour"></button><span class="t-title"></span>${starsHtml(t)}<button class="t-plus" type="button" aria-label="Add task">+</button></div><div class="t-bar"><i></i></div>`;
       el.querySelector(".t-title").textContent = t.title;
       el.querySelector(".t-bar i").style.width = t.tasks.length ? ((t.tasks.length - open) / t.tasks.length * 100) + "%" : "0%";
       const head = el.querySelector(".t-head");
       head.addEventListener("pointerdown", (e) => {
-        if (e.button !== 0 || e.target.closest(".t-plus, [contenteditable='true']")) return;
+        if (e.button !== 0 || e.target.closest(".t-plus, .t-stars, [contenteditable='true']")) return;
         e.stopPropagation();
         select(t.id);
         dragTopic(e, head, t, el);
@@ -624,13 +659,16 @@
       });
       // Mouse taps on the dot arrive through the drag handler (tap); this covers the keyboard.
       el.querySelector(".t-dot").addEventListener("click", (e) => { if (!justDragged && !picker) pickFor(t, e.currentTarget); });
+      const starsBtn = el.querySelector(".t-stars");
+      if (starsBtn) starsBtn.addEventListener("click", () => openDone(t, starsBtn));
       el.querySelector(".t-plus").addEventListener("click", () => { addingFor = t.id; render(); focusAdd(); });
     }
 
     const top = showHead ? 36 : 3;
     const area = { x: 3, y: top, w: b.w - 6, h: b.h - top - 3 };
-    if (t.tasks.length) {
-      const cells = t.tasks.map((task, i) => ({ task, i, weight: task.done ? 0.4 : 1 }));
+    const doneN = t.tasks.length - open;
+    if (open) {
+      const cells = t.tasks.map((task, i) => ({ task, i, weight: 1 })).filter(c => !c.task.done);
       for (const r of squarify(cells, area)) {
         const c = inset(r, 1);
         const cell = document.createElement("div");
@@ -642,10 +680,15 @@
           cell.querySelector("span").textContent = r.item.task.t;
           const cb = cell.querySelector("input");
           cb.checked = r.item.task.done;
-          cb.addEventListener("change", () => { r.item.task.done = cb.checked; save(); render(); });
+          cb.addEventListener("change", () => completeTask(t, r.item.task, cell));
         }
         el.appendChild(cell);
       }
+    } else if (showHead && doneN) {
+      const all = document.createElement("div");
+      all.className = "t-alldone";
+      all.innerHTML = `<b>${"\u2726".repeat(Math.min(doneN, 5))}</b><span>All ${doneN} done</span>`;
+      el.appendChild(all);
     } else if (showHead) {
       const empty = document.createElement("div");
       empty.className = "t-empty";
@@ -753,6 +796,17 @@
         pick.addEventListener("click", openIt);
         pick.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openIt(e); } });
       }
+      row.addEventListener("dblclick", (e) => {
+        e.preventDefault();
+        const nm = row.querySelector(".nm");
+        if (row.dataset.gid) {
+          const g = data.groups.find(x => x.id === +row.dataset.gid);
+          editText(nm, (v) => { g.name = v || "Untitled group"; save(); render(); });
+        } else {
+          const t = topicById(+row.dataset.id);
+          editText(nm, (v) => { t.title = v || "Untitled topic"; save(); render(); });
+        }
+      });
       row.addEventListener("click", () => {
         if (row.dataset.id) select(+row.dataset.id);
         const r = rects.get(key);
@@ -762,28 +816,33 @@
   }
 
   /* ---------- Drag a topic to regroup ---------- */
+  // The pointer is only captured once it really moves, so clicks and double-clicks
+  // (rename, colour dot, zoom) still reach the element under the mouse.
   function dragGesture(e, handle, h) {
     e.preventDefault();
-    handle.setPointerCapture(e.pointerId);
-    const sx = e.clientX, sy = e.clientY;
+    const id = e.pointerId, sx = e.clientX, sy = e.clientY;
     let started = false;
     const move = (ev) => {
+      if (ev.pointerId !== id) return;
       if (!started) {
         if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
-        started = true; h.start(ev);
+        started = true;
+        try { handle.setPointerCapture(id); } catch (err) {}
+        h.start(ev);
       }
       h.move(ev);
     };
     const up = (ev) => {
-      handle.removeEventListener("pointermove", move);
-      handle.removeEventListener("pointerup", up);
-      handle.removeEventListener("pointercancel", up);
+      if (ev.pointerId !== id) return;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
       if (started) h.end(ev);
       else if (h.tap) h.tap(ev);
     };
-    handle.addEventListener("pointermove", move);
-    handle.addEventListener("pointerup", up);
-    handle.addEventListener("pointercancel", up);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   }
 
   let justDragged = false;
@@ -1070,6 +1129,85 @@
     if (g && g.color) openPicker(g, anchor, true);
     else openPicker(t, anchor, false);
   }
+  /* ---------- Finished tasks as stars ---------- */
+  function starsHtml(t) {
+    const done = t.tasks.length - openCount(t);
+    if (!done) return "";
+    const shown = Math.min(done, 5);
+    return `<button class="t-stars" type="button" title="${done} done: show" aria-label="${done} finished tasks">`
+      + `<span class="st">✦</span>`.repeat(shown)
+      + (done > shown ? `<span class="more">+${done - shown}</span>` : "") + `</button>`;
+  }
+
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Ticking a task: its cell collapses into a star that flies up into the topic header.
+  function completeTask(t, task, cell) {
+    task.done = true;
+    save();
+    if (reduceMotion) { render(); return; }
+    const from = cell.getBoundingClientRect();
+    const tile = cell.closest(".tile");
+    const dest = (tile.querySelector(".t-stars") || tile.querySelector(".t-title") || tile).getBoundingClientRect();
+    cell.classList.add("completing");
+    const star = document.createElement("span");
+    star.className = "fly-star";
+    star.textContent = "✦";
+    star.style.setProperty("--accent", topicColor(t));
+    star.style.transform = `translate(${from.left + from.width / 2 - 8}px, ${from.top + from.height / 2 - 8}px) scale(1.6)`;
+    document.body.appendChild(star);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const tx = tile.querySelector(".t-stars") ? dest.right - 10 : dest.right + 6;
+      star.style.transform = `translate(${tx}px, ${dest.top + dest.height / 2 - 8}px) scale(.7)`;
+    }));
+    setTimeout(render, 450);
+    setTimeout(() => {
+      star.remove();
+      const btn = mapEl.querySelector(`.tile[data-id="${t.id}"] .t-stars`);
+      if (btn) btn.classList.add("twinkle");
+    }, 650);
+  }
+
+  function openDone(t, anchor) {
+    closePicker();
+    picker = document.createElement("div");
+    picker.className = "picker";
+    picker.style.width = "260px";
+    picker.style.setProperty("--accent", topicColor(t));
+    picker.setAttribute("role", "dialog");
+    picker.setAttribute("aria-label", "Finished tasks");
+    const head = document.createElement("div");
+    head.className = "p-title";
+    head.textContent = `Done in ${t.title}`;
+    const list = document.createElement("div");
+    list.className = "done-list";
+    const doneTasks = t.tasks.filter(k => k.done);
+    for (const k of doneTasks) {
+      const row = document.createElement("div");
+      row.className = "done-row";
+      row.innerHTML = `<span class="st">✦</span><span></span><button type="button">Reopen</button>`;
+      row.children[1].textContent = k.t;
+      row.querySelector("button").addEventListener("click", () => {
+        k.done = false; save(); render();
+        const btn = mapEl.querySelector(`.tile[data-id="${t.id}"] .t-stars`);
+        if (btn) openDone(t, btn); else closePicker();
+      });
+      list.appendChild(row);
+    }
+    const foot = document.createElement("div");
+    foot.className = "p-foot";
+    foot.innerHTML = `<span>${doneTasks.length} finished</span><button class="tab-btn" type="button">Clear all</button>`;
+    foot.querySelector("button").addEventListener("click", () => {
+      t.tasks = t.tasks.filter(k => !k.done); save(); render(); closePicker();
+    });
+    picker.append(head, list, foot);
+    document.body.appendChild(picker);
+    const a = anchor.getBoundingClientRect();
+    picker.style.left = Math.min(window.innerWidth - picker.offsetWidth - 8, Math.max(8, a.left - 8)) + "px";
+    const top = a.bottom + 8 + picker.offsetHeight > window.innerHeight ? a.top - picker.offsetHeight - 8 : a.bottom + 8;
+    picker.style.top = Math.max(8, top) + "px";
+    setTimeout(() => document.addEventListener("pointerdown", outside, true), 0);
+  }
+
   function openPicker(g, anchor, isGroup) {
     closePicker();
     picker = document.createElement("div");
@@ -1179,7 +1317,6 @@
   viewport.addEventListener("pointerdown", (e) => {
     if (e.target.closest("input, button, .t-head, [contenteditable='true']")) return;
     if (!e.target.closest(".tile")) select(null);
-    viewport.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 1) {
       pan = { px: e.clientX, py: e.clientY, x: view.x, y: view.y };
@@ -1193,6 +1330,10 @@
   viewport.addEventListener("pointermove", (e) => {
     if (!pointers.has(e.pointerId)) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    // Capture lazily (see dragGesture) so double-clicks on names and tiles still land.
+    if (!viewport.hasPointerCapture(e.pointerId) && pan && Math.hypot(e.clientX - pan.px, e.clientY - pan.py) > 3) {
+      try { viewport.setPointerCapture(e.pointerId); } catch (err) {}
+    }
     if (pinch && pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
