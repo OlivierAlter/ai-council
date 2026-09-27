@@ -10,6 +10,7 @@
     --void-2: #0d1220;
     --grid: rgba(120, 140, 190, 0.13);
     --surface: rgba(18, 24, 41, 0.92);
+    --surface-solid: #121829;
     --surface-2: #161d32;
     --line: #26304b;
     --line-strong: #3a4770;
@@ -52,87 +53,130 @@
   }
   #viewport.panning { cursor: grabbing; }
   #stars, #gridLayer { position: absolute; inset: 0; pointer-events: none; }
-  #gridLayer {
-    background-image: radial-gradient(circle, var(--grid) 1px, transparent 1.4px);
-  }
-  #world {
-    position: absolute; left: 0; top: 0;
-    transform-origin: 0 0;
-    will-change: transform;
-  }
-  #links { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
-  #links path { fill: none; stroke: var(--line-strong); stroke-width: 1.4; stroke-dasharray: 4 6; }
+  #gridLayer { background-image: radial-gradient(circle, var(--grid) 1px, transparent 1.4px); }
+  #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+  #map { position: absolute; left: 0; top: 0; }
 
-  /* ---------- Topic card ---------- */
-  .topic {
-    position: absolute;
-    width: 248px;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(6px);
-    user-select: none;
-    transition: border-color .15s, box-shadow .15s;
+  /* ---------- Path bar (top of the map) ---------- */
+  .map-path {
+    position: absolute; left: 0; right: 0; top: -30px; height: 24px; box-sizing: border-box;
+    display: flex; align-items: center; gap: 10px; padding: 0 10px;
+    background: rgba(13, 18, 32, 0.86); border: 1px solid var(--line); border-radius: 7px;
+    font: 500 11.5px var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden;
+    font-variant-numeric: tabular-nums;
   }
-  .topic.selected {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent), 0 0 34px -6px var(--accent), 0 10px 30px rgba(0, 0, 0, 0.4);
+  .map-path b { color: var(--text); font-weight: 500; }
+
+  /* ---------- Groups ---------- */
+  .group {
+    position: absolute; box-sizing: border-box;
+    background: rgba(22, 29, 50, 0.55);
+    border: 1px solid var(--line-strong); border-radius: 6px;
   }
-  .topic.dragging { cursor: grabbing; box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55); }
+  .g-label {
+    position: absolute; left: 0; right: 0; top: 0; height: 22px; box-sizing: border-box;
+    display: flex; align-items: center; gap: 8px; padding: 0 3px 0 8px;
+    font: 500 11px var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden;
+    font-variant-numeric: tabular-nums;
+  }
+  .g-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; border-radius: 3px; }
+  .g-name[contenteditable="true"] { background: var(--surface-2); outline: 1px solid var(--line-strong); padding: 0 4px; cursor: text; }
+  .g-label .spacer { flex: 1; }
+  .tab-btn {
+    border: 0; background: none; color: var(--muted); cursor: pointer;
+    font: 500 11px var(--mono); padding: 2px 6px; border-radius: 5px;
+  }
+  .tab-btn:hover { background: var(--line); color: var(--text); }
+
+  /* ---------- Topic tiles ---------- */
+  .tile {
+    position: absolute; box-sizing: border-box; overflow: hidden;
+    border-radius: 5px;
+    background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 16%, var(--surface-solid)) 0%, var(--surface-solid) 75%);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+    transition: border-color .15s, box-shadow .15s, opacity .15s;
+  }
+  .tile.hl { border-color: var(--accent); }
+  .tile.selected {
+    border-color: var(--accent); z-index: 2;
+    box-shadow: 0 0 0 1px var(--accent), 0 0 28px -4px var(--accent);
+  }
+  .tile.dragging { opacity: .3; }
   .t-head {
-    display: flex; align-items: center; gap: 8px;
-    padding: 10px 12px 8px;
-    cursor: grab;
+    position: absolute; left: 0; right: 0; top: 0; height: 30px; box-sizing: border-box;
+    display: flex; align-items: center; gap: 8px; padding: 0 5px 0 10px;
+    cursor: grab; user-select: none;
   }
-  .t-dot {
-    flex: none; width: 9px; height: 9px; border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 10px var(--accent);
-  }
+  .t-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
   .t-title {
-    flex: 1; min-width: 0;
-    font-weight: 700; font-size: 14.5px; letter-spacing: .01em;
-    overflow-wrap: anywhere;
-    border-radius: 4px;
+    flex: 1; min-width: 0; font-weight: 700; font-size: 13.5px; letter-spacing: .01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 4px;
   }
-  .t-title[contenteditable="true"] { background: var(--surface-2); outline: 1px solid var(--line-strong); padding: 0 4px; cursor: text; user-select: text; }
+  .t-title[contenteditable="true"] { background: var(--surface-2); outline: 1px solid var(--line-strong); padding: 0 4px; cursor: text; user-select: text; text-overflow: clip; }
   .t-count { font: 500 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
-  .t-bar { height: 2px; margin: 0 12px; background: var(--line); border-radius: 2px; overflow: hidden; }
-  .t-bar i { display: block; height: 100%; background: var(--accent); transition: width .25s; }
-  .t-tasks { list-style: none; margin: 0; padding: 6px 6px 2px; display: grid; gap: 1px; }
-  .task {
-    display: flex; align-items: flex-start; gap: 8px;
-    padding: 5px 6px; border-radius: 6px;
+  .t-plus {
+    flex: none; width: 22px; height: 22px; border: 0; border-radius: 5px; background: none;
+    color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1;
   }
-  .task:hover { background: rgba(255, 255, 255, 0.035); }
-  .task input[type="checkbox"] {
-    appearance: none; flex: none; margin: 2px 0 0;
-    width: 14px; height: 14px; border-radius: 4px;
-    border: 1.5px solid var(--faint); background: transparent; cursor: pointer;
+  .t-plus:hover { background: var(--line); color: var(--text); }
+  .t-bar { position: absolute; left: 10px; right: 10px; top: 29px; height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .t-bar i { display: block; height: 100%; background: var(--accent); }
+  .t-empty { position: absolute; left: 10px; top: 40px; font-size: 12px; color: var(--faint); }
+
+  /* Task cells, shaded like disk-map cushions */
+  .cell {
+    position: absolute; box-sizing: border-box; overflow: hidden;
+    border-radius: 3px;
+    background: radial-gradient(130% 120% at 28% 22%,
+      color-mix(in srgb, var(--accent) 62%, var(--surface-solid)) 0%,
+      color-mix(in srgb, var(--accent) 38%, var(--surface-solid)) 55%,
+      color-mix(in srgb, var(--accent) 16%, var(--void)) 100%);
+    display: flex; align-items: flex-start; gap: 6px; padding: 5px 6px;
+    font-size: 12px; line-height: 1.3; color: #f3f6ff; text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
+  }
+  .cell:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .45); }
+  .cell.done {
+    background: radial-gradient(130% 120% at 28% 22%, #2c3550 0%, #1b2236 60%, #121829 100%);
+    color: var(--faint); text-shadow: none;
+  }
+  .cell.done span { text-decoration: line-through; }
+  .cell span { flex: 1; min-width: 0; overflow: hidden; max-height: 100%; overflow-wrap: anywhere; }
+  .cell input[type="checkbox"] {
+    appearance: none; flex: none; margin: 1px 0 0;
+    width: 13px; height: 13px; border-radius: 4px;
+    border: 1.5px solid rgba(255, 255, 255, .6); background: rgba(0, 0, 0, .15); cursor: pointer;
     display: grid; place-content: center;
   }
-  .task input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
-  .task input[type="checkbox"]:checked::after {
+  .cell input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+  .cell input[type="checkbox"]:checked::after {
     content: ""; width: 7px; height: 4px; margin-top: -2px;
     border: solid var(--void); border-width: 0 0 2px 2px; transform: rotate(-45deg);
   }
-  .task span { flex: 1; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
-  .task.done span { color: var(--faint); text-decoration: line-through; }
-  .task .del {
-    flex: none; border: 0; background: none; color: var(--faint);
-    cursor: pointer; padding: 0 2px; line-height: 1; font-size: 15px; opacity: 0;
-  }
-  .task:hover .del, .task .del:focus-visible { opacity: 1; }
-  .task .del:hover { color: var(--text); }
-  .t-add { padding: 4px 12px 10px; }
-  .t-add input {
+  .t-adding { position: absolute; left: 6px; right: 6px; bottom: 6px; z-index: 3; }
+  .t-adding input {
     width: 100%; box-sizing: border-box;
-    background: transparent; border: 1px dashed var(--line); border-radius: 6px;
+    background: var(--surface-2); border: 1px solid var(--accent); border-radius: 6px;
     padding: 5px 8px; font-size: 12.5px; color: var(--text);
   }
-  .t-add input::placeholder { color: var(--faint); }
-  .t-add input:focus { outline: none; border-style: solid; border-color: var(--accent); }
+  .t-adding input:focus { outline: none; }
+
+  /* Drop targets while dragging a topic */
+  .drop-target { outline: 2px dashed var(--accent, var(--focus)); outline-offset: -3px; }
+  .drop-target::after {
+    content: attr(data-drop);
+    position: absolute; left: 50%; top: 6px; transform: translateX(-50%); z-index: 4;
+    font: 500 11px var(--mono); color: var(--void); background: var(--accent, var(--focus));
+    padding: 3px 8px; border-radius: 5px; white-space: nowrap; text-shadow: none;
+  }
+  .map-path.drop-target::after { top: 2px; padding: 1px 8px; }
+  .ghost {
+    position: fixed; z-index: 1000; pointer-events: none;
+    transform: translate(14px, 10px);
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 8px;
+    background: var(--surface); border: 1px solid var(--accent);
+    font-weight: 700; font-size: 13px; box-shadow: 0 12px 30px rgba(0, 0, 0, .5);
+  }
 
   /* ---------- HUD ---------- */
   .hud {
@@ -157,207 +201,156 @@
   .btn.primary { background: var(--c-blue); color: #0a1020; }
   .btn.primary:hover { background: #99c4ff; border-color: transparent; }
   .btn.icon { width: 32px; padding: 6px 0; text-align: center; }
+  .btn[aria-pressed="true"] { background: var(--surface-2); border-color: var(--line); }
   .zoom-read { font: 500 12px var(--mono); color: var(--muted); min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
   .sep { width: 1px; align-self: stretch; background: var(--line); margin: 2px 2px; }
+  .seg-lbl { font: 500 10.5px var(--mono); color: var(--faint); letter-spacing: .08em; text-transform: uppercase; padding-left: 4px; }
+  .seg { display: flex; background: var(--void-2); border: 1px solid var(--line); border-radius: 7px; padding: 2px; }
+  .seg button { border: 0; background: none; padding: 4px 9px; font-weight: 600; font-size: 12px; color: var(--muted); border-radius: 5px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--text); }
 
-  .bottom-left { bottom: 16px; left: 16px; padding: 7px 12px; font: 400 11.5px var(--mono); color: var(--muted); gap: 14px; font-variant-numeric: tabular-nums; }
-  .bottom-left b { color: var(--text); font-weight: 500; }
-
-  .minimap { bottom: 16px; right: 16px; padding: 6px; display: block; }
-  .minimap canvas { display: block; width: 180px; height: 120px; border-radius: 6px; cursor: pointer; }
-  .minimap .lbl { font: 400 10px var(--mono); color: var(--faint); letter-spacing: .1em; text-transform: uppercase; padding: 2px 2px 5px; }
-
-  /* ---------- Wireframe notes ---------- */
-  .notes {
-    position: absolute; top: 72px; right: 16px;
-    width: 280px; max-height: calc(100% - 270px); overflow: auto;
+  /* ---------- Side panels ---------- */
+  .panel {
+    position: absolute; top: 72px; box-sizing: border-box;
+    max-height: calc(100% - 88px); overflow: auto;
     background: rgba(13, 18, 32, 0.92); border: 1px solid var(--line); border-radius: 10px;
-    padding: 14px 16px; backdrop-filter: blur(8px);
+    padding: 12px 12px 14px; backdrop-filter: blur(8px);
     font-size: 12.5px; color: var(--muted);
   }
+  .panel h3 { margin: 14px 0 6px; font: 500 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+  .panel h3:first-child { margin-top: 0; }
+  .list { left: 16px; width: 256px; }
+  .notes { right: 16px; width: 280px; padding: 14px 16px; }
   .notes h2 { margin: 0 0 2px; font-size: 13px; color: var(--text); letter-spacing: .02em; }
   .notes .tag { font: 400 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--c-amber); }
-  .notes h3 { margin: 14px 0 6px; font: 500 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
   .notes ul { margin: 0; padding-left: 16px; display: grid; gap: 4px; }
   .notes kbd { font: 400 11px var(--mono); color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
 
-  .hint {
-    position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
-    font: 400 11.5px var(--mono); color: var(--faint); pointer-events: none; white-space: nowrap;
+  .rows { display: grid; gap: 1px; }
+  .row {
+    display: grid; grid-template-columns: 10px minmax(0, 1fr) 54px 24px; gap: 8px; align-items: center;
+    padding: 4px 6px; border-radius: 5px; cursor: pointer; color: var(--text);
   }
+  .row.head { cursor: default; color: var(--faint); font: 500 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .row:not(.head):hover, .row.active { background: var(--surface-2); }
+  .row.group-row .nm { font-weight: 700; }
+  .row.child { padding-left: 18px; }
+  .row .sw { width: 8px; height: 8px; border-radius: 2px; background: var(--accent, var(--line-strong)); }
+  .row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .pbar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+  .row .pbar i { display: block; height: 100%; background: var(--accent, var(--muted)); }
+  .row .n { font: 500 11px var(--mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
 
   @media (max-width: 720px) {
-    .minimap, .hint, .bottom-left { display: none; }
-    .notes { left: 16px; right: 16px; width: auto; top: auto; bottom: 16px; max-height: 45%; }
     .top-left { right: 16px; }
     .top-right { top: 70px; left: 16px; right: auto; }
     .hide-sm { display: none; }
+    .notes { left: 16px; right: 16px; width: auto; top: auto; bottom: 16px; max-height: 45%; z-index: 5; }
+    .list { left: 16px; right: 16px; width: auto; top: auto; bottom: 16px; max-height: 45%; z-index: 5; }
   }
-  /* ---------- Stacks ---------- */
-  .topic.stack-front { border-top-left-radius: 0; }
-  .topic.buried { cursor: pointer; overflow: hidden; background: var(--surface-2); border-color: var(--line-strong); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4); }
-  .topic.buried > * { visibility: hidden; }
-  .topic.buried:hover { border-color: var(--accent); }
-  .topic.drop-target { outline: 2px dashed var(--accent); outline-offset: 5px; }
-  .topic.drop-target::after {
-    content: "Drop to stack";
-    position: absolute; left: 50%; top: -34px; transform: translateX(-50%);
-    font: 500 11px var(--mono); color: var(--void); background: var(--accent);
-    padding: 3px 8px; border-radius: 5px; white-space: nowrap;
-  }
-  .stack-tab {
-    position: absolute; height: 27px; box-sizing: border-box;
-    display: flex; align-items: center; gap: 8px;
-    padding: 0 4px 0 8px;
-    background: var(--surface-2); border: 1px solid var(--line); border-bottom: 0;
-    border-radius: 8px 8px 0 0;
-    font: 500 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums;
-    cursor: grab; user-select: none; white-space: nowrap;
-  }
-  .stack-tab.dragging { cursor: grabbing; }
-  .stack-tab .grip { color: var(--faint); letter-spacing: -2px; }
-  .stack-tab b { color: var(--text); font-weight: 500; }
-  .tab-btn {
-    border: 0; background: none; color: var(--muted); cursor: pointer;
-    font: 500 11px var(--mono); padding: 3px 6px; border-radius: 5px;
-  }
-  .tab-btn:hover { background: var(--line); color: var(--text); }
-
   @media (prefers-reduced-motion: reduce) {
-    .topic, .t-bar i { transition: none; }
+    .tile { transition: none; }
   }
 </style>
 
 <div class="app">
-  <div id="viewport" aria-label="Topic canvas">
+  <div id="viewport" aria-label="Topic map">
     <canvas id="stars"></canvas>
     <div id="gridLayer"></div>
-    <div id="world">
-      <svg id="links" width="1" height="1"></svg>
-    </div>
+    <div id="world"><div id="map"></div></div>
   </div>
 
-  <div class="hud top-left">
+  <div class="hud top-left" id="brand">
     <div class="brand-mark" aria-hidden="true"></div>
-    <div class="brand">Orbit<small>Wireframe v0.1</small></div>
+    <div class="brand">Orbit<small>Wireframe v0.3</small></div>
   </div>
 
-  <div class="hud top-right" role="toolbar" aria-label="Canvas tools">
+  <div class="hud top-right" id="toolbar" role="toolbar" aria-label="Map tools">
     <button class="btn primary" id="addTopic" type="button">+ Topic</button>
+    <div class="sep"></div>
+    <span class="seg-lbl hide-sm">Size by</span>
+    <div class="seg" role="group" aria-label="Size tiles by">
+      <button type="button" id="sizeOpen" aria-pressed="true">Open tasks</button>
+      <button type="button" id="sizeAll" aria-pressed="false">All tasks</button>
+    </div>
     <div class="sep"></div>
     <button class="btn icon" id="zoomOut" type="button" aria-label="Zoom out">&minus;</button>
     <span class="zoom-read" id="zoomRead">100%</span>
     <button class="btn icon" id="zoomIn" type="button" aria-label="Zoom in">+</button>
-    <button class="btn" id="fit" type="button">Fit all</button>
-    <div class="sep hide-sm"></div>
-    <button class="btn" id="toggleNotes" type="button" aria-expanded="true">Notes</button>
+    <button class="btn" id="fit" type="button">Fit</button>
+    <div class="sep"></div>
+    <button class="btn" id="toggleList" type="button" aria-pressed="true">List</button>
+    <button class="btn" id="toggleNotes" type="button" aria-pressed="true">Notes</button>
     <button class="btn hide-sm" id="reset" type="button">Reset sample</button>
   </div>
 
-  <aside class="notes" id="notes">
+  <aside class="panel list" id="list" aria-label="Topic list">
+    <h3>Topics by size</h3>
+    <div class="rows" id="rows"></div>
+  </aside>
+
+  <aside class="panel notes" id="notes">
     <span class="tag">Wireframe</span>
-    <h2>Infinite topic canvas</h2>
-    <p style="margin:6px 0 0">Each rectangle is a topic. Tasks live inside it. The canvas is unbounded, so topics can sit near related work, like stars in a constellation. The topics shown are sample placeholders.</p>
+    <h2>Topic map</h2>
+    <p style="margin:6px 0 0">Topics tile together like a disk-space map. A topic's area is its share of the work, so the biggest block is where most of your open tasks are. Each small cell inside is one task. The topics shown are sample placeholders.</p>
     <h3>Try it</h3>
     <ul>
-      <li>Drag a topic by its header to move it</li>
-      <li>Drag empty space to pan; scroll or pinch to zoom</li>
-      <li>Double-click empty space to drop a new topic there</li>
-      <li>Double-click a topic name to rename it</li>
-      <li>Type in "Add task" and press <kbd>Enter</kbd></li>
+      <li>Tick a task's checkbox; the map re-balances</li>
+      <li>Click <kbd>+</kbd> on a topic to add tasks, <kbd>Enter</kbd> to keep adding</li>
+      <li>Drag a topic's header onto another topic to group them</li>
+      <li>Drag a topic onto the top bar to take it out of its group</li>
+      <li>Double-click a tile to zoom in; small cells show their text as you zoom</li>
+      <li>Drag the map to pan; scroll or pinch to zoom</li>
+      <li>Double-click a topic or group name to rename it</li>
       <li>Select a topic and press <kbd>Delete</kbd> to remove it</li>
-    </ul>
-    <h3>Stacks</h3>
-    <ul>
-      <li>Drop a topic onto another to stack them</li>
-      <li>Drag the stack's tab (or the top card of a pile) to move the whole stack</li>
-      <li>Click a card's edge in a pile to bring it to the top</li>
-      <li>Expand a pile into a column; drag a card out of the column to unstack it</li>
-      <li>Click the minimap to jump around</li>
     </ul>
     <h3>Open questions</h3>
     <ul>
-      <li>Should distance or size mean something (priority, due date)?</li>
-      <li>Link topics manually, or cluster them automatically?</li>
-      <li>Collapse a topic to a single "star" when zoomed far out?</li>
+      <li>Should size come from task count, estimates, or due dates?</li>
+      <li>Colour by topic, by group, or by urgency?</li>
+      <li>Do finished tasks stay visible, or drop off after a week?</li>
       <li>Sync tasks with monday.com, or keep them local?</li>
     </ul>
   </aside>
-
-  <div class="hud bottom-left" aria-live="off">
-    <span>X <b id="cx">0</b></span>
-    <span>Y <b id="cy">0</b></span>
-    <span>Topics <b id="ctopics">0</b></span>
-    <span>Open tasks <b id="copen">0</b></span>
-  </div>
-
-  <div class="hint">double-click the void to create a topic</div>
-
-  <div class="hud minimap">
-    <div class="lbl">Sector map</div>
-    <canvas id="minimap" width="360" height="240" aria-label="Minimap"></canvas>
-  </div>
 </div>
 
 <script>
 (function () {
   const COLORS = ["--c-blue", "--c-amber", "--c-mint", "--c-rose", "--c-violet"];
-  const STORE_KEY = "orbit-wireframe-v2";
+  const STORE_KEY = "orbit-wireframe-v3";
+  const PATH_H = 30;
   const css = getComputedStyle(document.documentElement);
   const colorOf = (v) => css.getPropertyValue(v).trim();
+  const tasks = (list) => list.map(([t, done]) => ({ t, done: !!done }));
 
   const sample = () => ({
-    view: null,
+    sizeBy: "open",
     topics: [
-      { id: 1, title: "Pricemetry Q4 roadmap", x: 80, y: 60, color: "--c-blue", tasks: [
-        { t: "Draft pricing-model v2 spec", done: true },
-        { t: "Review competitor scrape results", done: false },
-        { t: "Plan October release", done: false },
-      ]},
-      { id: 2, title: "Hiring", x: 440, y: -40, color: "--c-amber", tasks: [
-        { t: "Write data engineer job post", done: true },
-        { t: "Screen 4 candidates", done: false },
-      ]},
-      { id: 3, title: "AI Council app", x: 60, y: 400, color: "--c-violet", tasks: [
-        { t: "Finish WebSocket SDK tests", done: true },
-        { t: "Scheduler package cleanup", done: false },
-        { t: "Deploy to staging", done: false },
-      ]},
-      { id: 4, title: "Visual task app", x: 420, y: 330, color: "--c-mint", tasks: [
-        { t: "Wireframe the canvas", done: true },
-        { t: "Decide on data storage", done: false },
-        { t: "Pick zoom-level behaviour", done: false },
-      ]},
-      { id: 5, title: "Admin & personal", x: 800, y: 120, color: "--c-rose", tasks: [
-        { t: "Quarterly VAT filing", done: false },
-        { t: "Renew passport", done: false },
-      ]},
-      { id: 6, title: "Reading list", x: 808, y: 128, color: "--c-blue", tasks: [
-        { t: "Pricing strategy notes", done: false },
-        { t: "Spatial UI essays", done: true },
-      ]},
+      { id: 1, title: "Q4 roadmap", color: "--c-blue", tasks: tasks([
+        ["Draft pricing-model v2 spec", 1], ["Review competitor scrape results"], ["Plan October release"],
+        ["Write release notes"], ["Customer interviews x3"], ["Update pricing page copy"], ["Set Q4 OKRs", 1] ]) },
+      { id: 2, title: "Hiring", color: "--c-amber", tasks: tasks([
+        ["Write data engineer job post", 1], ["Screen 4 candidates"], ["Book onsite interviews"], ["Reference checks"] ]) },
+      { id: 3, title: "Pricing research", color: "--c-violet", tasks: tasks([
+        ["Elasticity model for retail"], ["Clean scraped price history"], ["Benchmark vs. 3 competitors"],
+        ["Summarise findings deck"], ["Share with sales", 1] ]) },
+      { id: 4, title: "AI Council app", color: "--c-rose", tasks: tasks([
+        ["Finish WebSocket SDK tests", 1], ["Scheduler package cleanup"], ["Deploy to staging"],
+        ["Write DEPLOY.md checklist", 1] ]) },
+      { id: 5, title: "Visual task app", color: "--c-mint", tasks: tasks([
+        ["Wireframe the canvas", 1], ["Try treemap layout", 1], ["Decide on data storage"], ["Pick sizing rule"] ]) },
+      { id: 6, title: "Admin & personal", color: "--c-amber", tasks: tasks([
+        ["Quarterly VAT filing"], ["Renew passport"], ["Book dentist", 1] ]) },
+      { id: 7, title: "Reading list", color: "--c-blue", tasks: tasks([
+        ["Pricing strategy notes"], ["Spatial UI essays", 1] ]) },
+      { id: 8, title: "Health", color: "--c-mint", tasks: tasks([
+        ["Run 3x this week"], ["Sleep before midnight", 1] ]) },
     ],
-    links: [[1, 2], [3, 4], [1, 4]],
-    stacks: [{ id: 1, x: 800, y: 120, members: [5, 6], collapsed: true }],
+    groups: [
+      { id: 1, name: "Pricemetry", members: [1, 2, 3] },
+      { id: 2, name: "Side projects", members: [4, 5] },
+    ],
   });
-
-  let data = load() || sample();
-  data.stacks = data.stacks || [];
-  let nextId = Math.max(0, ...data.topics.map(t => t.id)) + 1;
-  let nextStackId = Math.max(0, ...data.stacks.map(s => s.id)) + 1;
-  const tabs = new Map();
-  const view = data.view || { x: 0, y: 0, s: 1 };
-  let selected = null;
-
-  const viewport = document.getElementById("viewport");
-  const world = document.getElementById("world");
-  const linksSvg = document.getElementById("links");
-  const gridLayer = document.getElementById("gridLayer");
-  const stars = document.getElementById("stars");
-  const sctx = stars.getContext("2d");
-  const mini = document.getElementById("minimap");
-  const mctx = mini.getContext("2d");
-  const cards = new Map();
 
   function load() {
     try { const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
@@ -365,9 +358,387 @@
   let saveTimer;
   function save() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      try { localStorage.setItem(STORE_KEY, JSON.stringify({ ...data, view })); } catch (e) {}
-    }, 250);
+    saveTimer = setTimeout(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) {} }, 250);
+  }
+
+  let data = load() || sample();
+  let nextId = Math.max(0, ...data.topics.map(t => t.id)) + 1;
+  let nextGroupId = Math.max(0, ...data.groups.map(g => g.id)) + 1;
+  const view = { x: 0, y: 0, s: 1 };
+  const map = { w: 800, h: 500 };
+  const rects = new Map();       // topic id or "g<id>" -> world rect of the last render
+  let selected = null;
+  let addingFor = null;
+  let renderedAt = 1;
+
+  const viewport = document.getElementById("viewport");
+  const world = document.getElementById("world");
+  const mapEl = document.getElementById("map");
+  const gridLayer = document.getElementById("gridLayer");
+  const stars = document.getElementById("stars");
+  const sctx = stars.getContext("2d");
+  const listPanel = document.getElementById("list");
+  const notesPanel = document.getElementById("notes");
+
+  const topicById = (id) => data.topics.find(t => t.id === id);
+  const groupOf = (id) => data.groups.find(g => g.members.includes(id));
+  const openCount = (t) => t.tasks.filter(k => !k.done).length;
+  function weightOf(t) {
+    const open = openCount(t), done = t.tasks.length - open;
+    return data.sizeBy === "open" ? open + done * 0.25 + 0.5 : t.tasks.length + 0.5;
+  }
+  const groupWeight = (g) => g.members.reduce((s, id) => s + weightOf(topicById(id)), 0);
+
+  /* ---------- Squarified treemap ---------- */
+  function squarify(items, rect) {
+    const out = [];
+    const total = items.reduce((s, i) => s + i.weight, 0);
+    if (!items.length || total <= 0 || rect.w <= 0 || rect.h <= 0) return out;
+    const k = (rect.w * rect.h) / total;
+    const nodes = [...items].sort((a, b) => b.weight - a.weight).map(it => ({ it, a: it.weight * k }));
+    const worst = (row, side) => {
+      const s = row.reduce((a, n) => a + n.a, 0);
+      let mx = 0, mn = Infinity;
+      for (const n of row) { mx = Math.max(mx, n.a); mn = Math.min(mn, n.a); }
+      return Math.max((side * side * mx) / (s * s), (s * s) / (side * side * mn));
+    };
+    const place = (row, r) => {
+      const s = row.reduce((a, n) => a + n.a, 0);
+      if (r.w >= r.h) {
+        const cw = s / r.h; let y = r.y;
+        for (const n of row) { const h = n.a / cw; out.push({ item: n.it, x: r.x, y, w: cw, h }); y += h; }
+        return { x: r.x + cw, y: r.y, w: r.w - cw, h: r.h };
+      }
+      const rh = s / r.w; let x = r.x;
+      for (const n of row) { const w = n.a / rh; out.push({ item: n.it, x, y: r.y, w, h: rh }); x += w; }
+      return { x: r.x, y: r.y + rh, w: r.w, h: r.h - rh };
+    };
+    let r = { ...rect }, row = [], i = 0;
+    while (i < nodes.length) {
+      const side = Math.min(r.w, r.h);
+      if (!row.length || worst([...row, nodes[i]], side) <= worst(row, side)) row.push(nodes[i++]);
+      else { r = place(row, r); row = []; }
+    }
+    if (row.length) place(row, r);
+    return out;
+  }
+  const inset = (r, d) => ({ x: r.x + d, y: r.y + d, w: Math.max(0, r.w - 2 * d), h: Math.max(0, r.h - 2 * d) });
+  const box = (el, r) => { el.style.left = r.x + "px"; el.style.top = r.y + "px"; el.style.width = r.w + "px"; el.style.height = r.h + "px"; };
+
+  /* ---------- Render ---------- */
+  function render() {
+    const k = view.s;
+    renderedAt = k;
+    rects.clear();
+    mapEl.innerHTML = "";
+    mapEl.style.width = map.w + "px";
+    mapEl.style.height = map.h + "px";
+
+    const path = document.createElement("div");
+    path.className = "map-path";
+    const open = data.topics.reduce((n, t) => n + openCount(t), 0);
+    path.innerHTML = `<b>All topics</b><span>${data.topics.length} topics</span><span>${open} open tasks</span><span>sized by ${data.sizeBy === "open" ? "open" : "all"} tasks</span>`;
+    mapEl.appendChild(path);
+
+    const items = [
+      ...data.topics.filter(t => !groupOf(t.id)).map(t => ({ kind: "t", t, weight: weightOf(t) })),
+      ...data.groups.map(g => ({ kind: "g", g, weight: groupWeight(g) })),
+    ];
+    for (const r of squarify(items, { x: 0, y: 0, w: map.w, h: map.h })) {
+      const b = inset(r, 2);
+      if (r.item.kind === "t") drawTopic(r.item.t, b);
+      else drawGroup(r.item.g, b);
+    }
+    renderList();
+    markSelected();
+  }
+
+  function drawGroup(g, b) {
+    const k = view.s;
+    rects.set("g" + g.id, b);
+    const el = document.createElement("div");
+    el.className = "group";
+    el.dataset.gid = g.id;
+    box(el, b);
+    const labelH = b.w * k >= 90 && b.h * k >= 60 ? 22 : 0;
+    if (labelH) {
+      const open = g.members.reduce((n, id) => n + openCount(topicById(id)), 0);
+      el.innerHTML = `<div class="g-label"><span class="g-name"></span><span>${g.members.length} &middot; ${open} open</span><span class="spacer"></span><button class="tab-btn" type="button">Ungroup</button></div>`;
+      const name = el.querySelector(".g-name");
+      name.textContent = g.name;
+      name.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        editText(name, (v) => { g.name = v || "Untitled group"; save(); render(); });
+      });
+      el.querySelector(".tab-btn").addEventListener("click", () => {
+        data.groups = data.groups.filter(x => x !== g); save(); render();
+      });
+    }
+    el.title = g.name;
+    mapEl.appendChild(el);
+    const inner = { x: b.x + 2, y: b.y + labelH + 1, w: b.w - 4, h: b.h - labelH - 3 };
+    const members = g.members.map(id => ({ t: topicById(id), weight: weightOf(topicById(id)) }));
+    for (const r of squarify(members, inner)) drawTopic(r.item.t, inset(r, 1.5));
+  }
+
+  function drawTopic(t, b) {
+    const k = view.s;
+    rects.set(t.id, b);
+    const el = document.createElement("div");
+    el.className = "tile";
+    el.dataset.id = t.id;
+    el.style.setProperty("--accent", colorOf(t.color));
+    box(el, b);
+    const showHead = b.w * k >= 76 && b.h * k >= 50;
+    const open = openCount(t);
+    el.title = `${t.title} · ${open} open of ${t.tasks.length}`;
+
+    if (showHead) {
+      el.innerHTML = `<div class="t-head"><span class="t-dot"></span><span class="t-title"></span><span class="t-count">${t.tasks.length - open}/${t.tasks.length}</span><button class="t-plus" type="button" aria-label="Add task">+</button></div><div class="t-bar"><i></i></div>`;
+      el.querySelector(".t-title").textContent = t.title;
+      el.querySelector(".t-bar i").style.width = t.tasks.length ? ((t.tasks.length - open) / t.tasks.length * 100) + "%" : "0%";
+      const head = el.querySelector(".t-head");
+      head.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 || e.target.closest("button, [contenteditable='true']")) return;
+        e.stopPropagation();
+        select(t.id);
+        dragTopic(e, head, t, el);
+      });
+      el.querySelector(".t-title").addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        editText(e.currentTarget, (v) => { t.title = v || "Untitled topic"; save(); render(); });
+      });
+      el.querySelector(".t-plus").addEventListener("click", () => { addingFor = t.id; render(); focusAdd(); });
+    }
+
+    const top = showHead ? 36 : 3;
+    const area = { x: 3, y: top, w: b.w - 6, h: b.h - top - 3 };
+    if (t.tasks.length) {
+      const cells = t.tasks.map((task, i) => ({ task, i, weight: task.done ? 0.4 : 1 }));
+      for (const r of squarify(cells, area)) {
+        const c = inset(r, 1);
+        const cell = document.createElement("div");
+        cell.className = "cell" + (r.item.task.done ? " done" : "");
+        box(cell, c);
+        cell.title = r.item.task.t;
+        if (c.w * k >= 72 && c.h * k >= 22) {
+          cell.innerHTML = `<input type="checkbox" id="chk-${t.id}-${r.item.i}" aria-label="Done"><span></span>`;
+          cell.querySelector("span").textContent = r.item.task.t;
+          const cb = cell.querySelector("input");
+          cb.checked = r.item.task.done;
+          cb.addEventListener("change", () => { r.item.task.done = cb.checked; save(); render(); });
+        }
+        el.appendChild(cell);
+      }
+    } else if (showHead) {
+      const empty = document.createElement("div");
+      empty.className = "t-empty";
+      empty.textContent = "No tasks yet";
+      el.appendChild(empty);
+    }
+
+    if (addingFor === t.id) {
+      const wrap = document.createElement("div");
+      wrap.className = "t-adding";
+      wrap.innerHTML = `<input type="text" placeholder="New task, then Enter" aria-label="New task" id="add-${t.id}">`;
+      const input = wrap.querySelector("input");
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && input.value.trim()) {
+          t.tasks.push({ t: input.value.trim(), done: false });
+          save(); render(); focusAdd();
+        } else if (e.key === "Escape") { addingFor = null; render(); }
+      });
+      input.addEventListener("blur", () => setTimeout(() => {
+        const a = document.activeElement;
+        if (addingFor === t.id && !(a && a.id === "add-" + t.id)) { addingFor = null; render(); }
+      }, 0));
+      el.appendChild(wrap);
+    }
+
+    el.addEventListener("pointerdown", () => select(t.id));
+    el.addEventListener("dblclick", (e) => {
+      if (e.target.closest("input, button, .t-title")) return;
+      e.stopPropagation();
+      zoomTo(rects.get(t.id));
+    });
+    mapEl.appendChild(el);
+  }
+
+  function focusAdd() {
+    const input = addingFor != null && document.getElementById("add-" + addingFor);
+    if (input) input.focus();
+  }
+
+  function editText(el, commit) {
+    el.setAttribute("contenteditable", "true");
+    el.focus();
+    const r = document.createRange(); r.selectNodeContents(el);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    const key = (e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); el.blur(); } };
+    el.addEventListener("keydown", key);
+    el.addEventListener("blur", () => {
+      el.removeEventListener("keydown", key);
+      el.setAttribute("contenteditable", "false");
+      commit(el.textContent.trim());
+    }, { once: true });
+  }
+
+  function select(id) {
+    selected = id;
+    markSelected();
+  }
+  function markSelected() {
+    mapEl.querySelectorAll(".tile").forEach(el => el.classList.toggle("selected", +el.dataset.id === selected));
+    document.querySelectorAll(".row[data-id]").forEach(el => el.classList.toggle("active", +el.dataset.id === selected));
+  }
+
+  /* ---------- List panel (tree view) ---------- */
+  function renderList() {
+    const rows = document.getElementById("rows");
+    const total = data.topics.reduce((s, t) => s + weightOf(t), 0) || 1;
+    const topicRow = (t, child) => {
+      const pct = weightOf(t) / total * 100;
+      return `<div class="row${child ? " child" : ""}" data-id="${t.id}" style="--accent:${colorOf(t.color)}">
+        <span class="sw"></span><span class="nm"></span>
+        <span class="pbar"><i style="width:${pct.toFixed(1)}%"></i></span><span class="n">${openCount(t)}</span></div>`;
+    };
+    const roots = [
+      ...data.topics.filter(t => !groupOf(t.id)).map(t => ({ t, w: weightOf(t) })),
+      ...data.groups.map(g => ({ g, w: groupWeight(g) })),
+    ].sort((a, b) => b.w - a.w);
+    let html = `<div class="row head"><span></span><span>Topic</span><span>Share</span><span class="n">Open</span></div>`;
+    const names = [];
+    for (const r of roots) {
+      if (r.t) { html += topicRow(r.t, false); names.push(r.t.title); continue; }
+      const pct = r.w / total * 100;
+      const open = r.g.members.reduce((n, id) => n + openCount(topicById(id)), 0);
+      html += `<div class="row group-row" data-gid="${r.g.id}"><span class="sw"></span><span class="nm"></span>
+        <span class="pbar"><i style="width:${pct.toFixed(1)}%"></i></span><span class="n">${open}</span></div>`;
+      names.push(r.g.name);
+      const kids = r.g.members.map(topicById).sort((a, b) => weightOf(b) - weightOf(a));
+      for (const t of kids) { html += topicRow(t, true); names.push(t.title); }
+    }
+    rows.innerHTML = html;
+    rows.querySelectorAll(".row:not(.head) .nm").forEach((el, i) => { el.textContent = names[i]; });
+    rows.querySelectorAll(".row:not(.head)").forEach(row => {
+      const key = row.dataset.id ? +row.dataset.id : "g" + row.dataset.gid;
+      const target = () => row.dataset.id
+        ? mapEl.querySelector(`.tile[data-id="${row.dataset.id}"]`)
+        : mapEl.querySelector(`.group[data-gid="${row.dataset.gid}"]`);
+      row.addEventListener("mouseenter", () => { const el = target(); if (el) el.classList.add("hl"); });
+      row.addEventListener("mouseleave", () => { const el = target(); if (el) el.classList.remove("hl"); });
+      row.addEventListener("click", () => {
+        if (row.dataset.id) select(+row.dataset.id);
+        const r = rects.get(key);
+        if (r) zoomTo(r);
+      });
+    });
+  }
+
+  /* ---------- Drag a topic to regroup ---------- */
+  function dragGesture(e, handle, h) {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    const sx = e.clientX, sy = e.clientY;
+    let started = false;
+    const move = (ev) => {
+      if (!started) {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
+        started = true; h.start(ev);
+      }
+      h.move(ev);
+    };
+    const up = (ev) => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      if (started) h.end(ev);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  }
+
+  function dragTopic(e, head, t, el) {
+    let ghost;
+    dragGesture(e, head, {
+      start() {
+        el.classList.add("dragging");
+        ghost = document.createElement("div");
+        ghost.className = "ghost";
+        ghost.style.setProperty("--accent", colorOf(t.color));
+        ghost.innerHTML = `<span class="t-dot"></span><span></span>`;
+        ghost.lastChild.textContent = t.title;
+        document.body.appendChild(ghost);
+      },
+      move(ev) {
+        ghost.style.left = ev.clientX + "px";
+        ghost.style.top = ev.clientY + "px";
+        highlight(findTarget(ev, t.id));
+      },
+      end(ev) {
+        const target = findTarget(ev, t.id);
+        highlight(null);
+        ghost.remove();
+        el.classList.remove("dragging");
+        if (target) moveTopic(t.id, target);
+      },
+    });
+  }
+
+  // What the dragged topic would land in; null when the drop would change nothing.
+  function findTarget(ev, id) {
+    const from = groupOf(id);
+    for (const node of document.elementsFromPoint(ev.clientX, ev.clientY)) {
+      if (!node.closest) continue;
+      const tile = node.closest(".tile");
+      if (tile) {
+        const tid = +tile.dataset.id;
+        if (tid === id) continue;
+        const g = groupOf(tid);
+        if (g && g === from) return null;
+        return g ? { type: "group", g, el: tile } : { type: "topic", tid, el: tile };
+      }
+      const gEl = node.closest(".group");
+      if (gEl) {
+        const g = data.groups.find(x => x.id === +gEl.dataset.gid);
+        return g && g !== from ? { type: "group", g, el: gEl } : null;
+      }
+      const path = node.closest(".map-path");
+      if (path) return from ? { type: "root", el: path } : null;
+    }
+    return null;
+  }
+
+  let hovered = null;
+  function highlight(target) {
+    const el = target && target.el;
+    if (hovered === el) return;
+    if (hovered) { hovered.classList.remove("drop-target"); delete hovered.dataset.drop; }
+    hovered = el;
+    if (!el) return;
+    el.dataset.drop = target.type === "root" ? "Move to top level"
+      : target.type === "group" ? `Add to ${target.g.name}` : "Group together";
+    el.classList.add("drop-target");
+  }
+
+  function moveTopic(id, target) {
+    const from = groupOf(id);
+    if (from) from.members = from.members.filter(m => m !== id);
+    let renameGroup = null;
+    if (target.type === "group") target.g.members.push(id);
+    else if (target.type === "topic") {
+      const g = { id: nextGroupId++, name: "New group", members: [target.tid, id] };
+      data.groups.push(g);
+      renameGroup = g;
+    }
+    data.groups = data.groups.filter(g => g.members.length >= 2);
+    select(id);
+    save(); render();
+    if (renameGroup) {
+      const name = mapEl.querySelector(`.group[data-gid="${renameGroup.id}"] .g-name`);
+      if (name) editText(name, (v) => { renameGroup.name = v || "Untitled group"; save(); render(); });
+    }
   }
 
   /* ---------- Starfield (parallax, screen space) ---------- */
@@ -386,447 +757,72 @@
   function drawStars() {
     const w = viewport.clientWidth, h = viewport.clientHeight;
     sctx.clearRect(0, 0, w, h);
+    sctx.fillStyle = "#cfd8ff";
     for (const s of starList) {
       const x = ((s.x + view.x * s.d) % 2000 + 2000) % 2000;
       const y = ((s.y + view.y * s.d) % 2000 + 2000) % 2000;
       if (x > w || y > h) continue;
       sctx.globalAlpha = s.a;
-      sctx.fillStyle = "#cfd8ff";
       sctx.beginPath(); sctx.arc(x, y, s.r, 0, Math.PI * 2); sctx.fill();
     }
     sctx.globalAlpha = 1;
   }
 
   /* ---------- View ---------- */
+  let settle;
   function applyView() {
     world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`;
     const g = 28 * view.s;
     gridLayer.style.backgroundSize = `${g}px ${g}px`;
     gridLayer.style.backgroundPosition = `${view.x}px ${view.y}px`;
-    gridLayer.style.opacity = Math.min(1, Math.max(0, (view.s - 0.35) * 2));
     document.getElementById("zoomRead").textContent = Math.round(view.s * 100) + "%";
-    const c = toWorld(viewport.clientWidth / 2, viewport.clientHeight / 2);
-    document.getElementById("cx").textContent = Math.round(c.x).toLocaleString();
-    document.getElementById("cy").textContent = Math.round(c.y).toLocaleString();
     drawStars();
-    drawMinimap();
-    save();
+    // Re-render after zooming so labels appear once tiles are big enough on screen.
+    if (view.s !== renderedAt) { clearTimeout(settle); settle = setTimeout(render, 140); }
   }
   const toWorld = (sx, sy) => ({ x: (sx - view.x) / view.s, y: (sy - view.y) / view.s });
   function zoomAt(factor, sx, sy) {
-    const ns = Math.min(2.5, Math.max(0.25, view.s * factor));
+    const ns = Math.min(8, Math.max(0.5, view.s * factor));
     view.x = sx - (sx - view.x) * (ns / view.s);
     view.y = sy - (sy - view.y) * (ns / view.s);
     view.s = ns;
     applyView();
   }
-  function bounds() {
-    if (!data.topics.length) return { x: 0, y: 0, w: 400, h: 300 };
-    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
-    for (const t of data.topics) {
-      const el = cards.get(t.id);
-      const w = el ? el.offsetWidth : 248, h = el ? el.offsetHeight : 160;
-      x1 = Math.min(x1, t.x); y1 = Math.min(y1, t.y);
-      x2 = Math.max(x2, t.x + w); y2 = Math.max(y2, t.y + h);
-    }
-    return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+
+  // Screen area the map may use, leaving room for the floating panels.
+  function avail() {
+    const W = viewport.clientWidth, H = viewport.clientHeight;
+    const wide = window.innerWidth > 720;
+    const topBar = Math.max(document.getElementById("brand").getBoundingClientRect().bottom,
+                            document.getElementById("toolbar").getBoundingClientRect().bottom);
+    let left = 16, right = W - 16, top = (wide ? 72 : topBar + 12) + PATH_H, bottom = H - 16;
+    if (wide && !listPanel.hidden) left = listPanel.getBoundingClientRect().right + 12;
+    if (wide && !notesPanel.hidden) right = notesPanel.getBoundingClientRect().left - 12;
+    return { left, top, w: Math.max(200, right - left), h: Math.max(160, bottom - top) };
   }
-  function fitAll() {
-    const b = bounds(), pad = 90;
-    const notesEl = document.getElementById("notes");
-    const side = notesEl && !notesEl.hidden && window.innerWidth > 720 ? notesEl.offsetWidth + 16 : 0;
-    const vw = viewport.clientWidth - side, vh = viewport.clientHeight;
-    view.s = Math.min(1.2, Math.max(0.25, Math.min((vw - pad * 2) / b.w, (vh - pad * 2) / b.h)));
-    view.x = vw / 2 - (b.x + b.w / 2) * view.s;
-    view.y = vh / 2 - (b.y + b.h / 2) * view.s;
+  function relayout() {
+    const a = avail();
+    map.w = a.w; map.h = a.h;
+    view.s = 1; view.x = a.left; view.y = a.top;
+    applyView();
+    render();
+  }
+  function zoomTo(r) {
+    if (!r) return;
+    const a = avail();
+    const s = Math.min(8, Math.max(0.5, Math.min(a.w / r.w, a.h / r.h) * 0.92));
+    view.s = s;
+    view.x = a.left + a.w / 2 - (r.x + r.w / 2) * s;
+    view.y = a.top + a.h / 2 - (r.y + r.h / 2) * s;
     applyView();
   }
 
-  /* ---------- Cards ---------- */
-  function renderCard(t) {
-    let el = cards.get(t.id);
-    if (!el) {
-      el = document.createElement("div");
-      el.className = "topic";
-      el.dataset.id = t.id;
-      el.innerHTML = `
-        <div class="t-head"><span class="t-dot"></span><span class="t-title"></span><span class="t-count"></span></div>
-        <div class="t-bar"><i></i></div>
-        <ul class="t-tasks"></ul>
-        <div class="t-add"><input type="text" placeholder="Add task" aria-label="Add task" id="add-${t.id}"></div>`;
-      world.appendChild(el);
-      cards.set(t.id, el);
-      wireCard(el, t);
-    }
-    el.style.setProperty("--accent", colorOf(t.color));
-    el.style.left = t.x + "px";
-    el.style.top = t.y + "px";
-    const title = el.querySelector(".t-title");
-    if (title.getAttribute("contenteditable") !== "true") title.textContent = t.title;
-    const done = t.tasks.filter(k => k.done).length;
-    el.querySelector(".t-count").textContent = `${done}/${t.tasks.length}`;
-    el.querySelector(".t-bar i").style.width = t.tasks.length ? (done / t.tasks.length * 100) + "%" : "0%";
-    const ul = el.querySelector(".t-tasks");
-    ul.innerHTML = "";
-    t.tasks.forEach((k, i) => {
-      const li = document.createElement("li");
-      li.className = "task" + (k.done ? " done" : "");
-      li.innerHTML = `<input type="checkbox" id="chk-${t.id}-${i}"><span></span><button class="del" type="button" aria-label="Delete task">&times;</button>`;
-      li.querySelector("span").textContent = k.t;
-      const cb = li.querySelector("input");
-      cb.checked = k.done;
-      cb.addEventListener("change", () => { k.done = cb.checked; renderCard(t); updateStats(); save(); });
-      li.querySelector(".del").addEventListener("click", () => { t.tasks.splice(i, 1); renderCard(t); updateStats(); drawLinks(); save(); });
-      ul.appendChild(li);
-    });
-    const s = stackOf(t.id);
-    if (s) layoutStack(s);
-  }
-
-  function wireCard(el, t) {
-    const head = el.querySelector(".t-head");
-    const title = el.querySelector(".t-title");
-
-    el.addEventListener("pointerdown", (e) => {
-      e.stopPropagation();
-      if (el.classList.contains("buried")) { bringToTop(t.id); save(); }
-      select(t.id);
-    });
-
-    head.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || title.getAttribute("contenteditable") === "true") return;
-      const s = stackOf(t.id);
-      // A collapsed pile moves as one; a card in an expanded column comes out.
-      if (s && s.collapsed) { dragStack(e, head, s); return; }
-      let ox, oy;
-      dragGesture(e, head, {
-        start() {
-          if (s) detach(t.id);
-          ox = t.x; oy = t.y;
-          el.classList.add("dragging");
-          el.style.zIndex = 100000;
-        },
-        move(dx, dy, ev) {
-          t.x = ox + dx; t.y = oy + dy;
-          el.style.left = t.x + "px"; el.style.top = t.y + "px";
-          drawLinks(); drawMinimap();
-          highlightTarget(findTarget(ev, [t.id]));
-        },
-        end(ev) {
-          el.classList.remove("dragging");
-          el.style.zIndex = ++zTop;
-          const target = findTarget(ev, [t.id]);
-          highlightTarget(null);
-          if (target != null) joinStack(target, [t.id]);
-          save();
-        },
-      });
-    });
-
-    title.addEventListener("dblclick", (e) => { e.stopPropagation(); editTitle(el, t); });
-
-    const input = el.querySelector(".t-add input");
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && input.value.trim()) {
-        t.tasks.push({ t: input.value.trim(), done: false });
-        input.value = "";
-        renderCard(t); updateStats(); drawLinks(); drawMinimap(); save();
-      }
-    });
-    el.addEventListener("dblclick", (e) => e.stopPropagation());
-  }
-
-  function editTitle(el, t) {
-    const title = el.querySelector(".t-title");
-    title.setAttribute("contenteditable", "true");
-    title.focus();
-    const r = document.createRange(); r.selectNodeContents(title);
-    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
-    const finish = () => {
-      title.setAttribute("contenteditable", "false");
-      t.title = title.textContent.trim() || "Untitled topic";
-      title.textContent = t.title;
-      title.removeEventListener("blur", finish);
-      title.removeEventListener("keydown", key);
-      save();
-    };
-    const key = (e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); title.blur(); } };
-    title.addEventListener("blur", finish);
-    title.addEventListener("keydown", key);
-  }
-
-  let zTop = 1;
-  function select(id) {
-    selected = id;
-    for (const [cid, el] of cards) el.classList.toggle("selected", cid === id);
-    const el = cards.get(id);
-    if (el && !stackOf(id)) el.style.zIndex = ++zTop;
-  }
-
-  /* ---------- Drag helper (4px threshold so clicks stay clicks) ---------- */
-  function dragGesture(e, handle, h) {
-    e.preventDefault();
-    handle.setPointerCapture(e.pointerId);
-    const sx = e.clientX, sy = e.clientY;
-    let started = false;
-    const move = (ev) => {
-      if (!started) {
-        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
-        started = true; h.start();
-      }
-      h.move((ev.clientX - sx) / view.s, (ev.clientY - sy) / view.s, ev);
-    };
-    const up = (ev) => {
-      handle.removeEventListener("pointermove", move);
-      handle.removeEventListener("pointerup", up);
-      handle.removeEventListener("pointercancel", up);
-      if (started) h.end(ev);
-    };
-    handle.addEventListener("pointermove", move);
-    handle.addEventListener("pointerup", up);
-    handle.addEventListener("pointercancel", up);
-  }
-
-  /* ---------- Stacks ---------- */
-  const topicById = (id) => data.topics.find(t => t.id === id);
-  const stackOf = (id) => data.stacks.find(s => s.members.includes(id));
-
-  function resetCard(id) {
-    const el = cards.get(id);
-    if (!el) return;
-    el.classList.remove("buried", "stack-front");
-    el.style.height = "";
-    el.style.zIndex = ++zTop;
-  }
-
-  function getTab(s) {
-    let tab = tabs.get(s.id);
-    if (tab) return tab;
-    tab = document.createElement("div");
-    tab.className = "stack-tab";
-    tab.innerHTML = `<span class="grip" aria-hidden="true">::::</span><span class="lbl"></span>
-      <button class="tab-btn toggle" type="button"></button><button class="tab-btn unstack" type="button">Unstack</button>`;
-    world.appendChild(tab);
-    tabs.set(s.id, tab);
-    tab.addEventListener("pointerdown", (e) => {
-      e.stopPropagation();
-      if (e.button !== 0 || e.target.closest("button")) return;
-      dragStack(e, tab, s);
-    });
-    tab.addEventListener("dblclick", (e) => e.stopPropagation());
-    tab.querySelector(".toggle").addEventListener("click", () => {
-      s.collapsed = !s.collapsed; layoutStack(s); drawLinks(); drawMinimap(); save();
-    });
-    tab.querySelector(".unstack").addEventListener("click", () => unstack(s));
-    return tab;
-  }
-
-  function layoutStack(s) {
-    if (s.members.some(id => !cards.get(id))) return;
-    const front = cards.get(s.members[0]);
-    s.members.forEach(id => { const el = cards.get(id); el.classList.remove("buried", "stack-front"); el.style.height = ""; });
-    const frontH = front.offsetHeight;
-    const zb = (zTop += s.members.length + 2);
-    let y = s.y;
-    s.members.forEach((id, i) => {
-      const t = topicById(id), el = cards.get(id);
-      if (s.collapsed) {
-        const o = Math.min(i, 3) * 9;
-        t.x = s.x + o; t.y = s.y + o;
-        if (i > 0) { el.classList.add("buried"); el.style.height = frontH + "px"; }
-      } else {
-        t.x = s.x; t.y = y;
-        y += el.offsetHeight + 12;
-      }
-      el.style.left = t.x + "px"; el.style.top = t.y + "px";
-      el.style.zIndex = zb - i;
-    });
-    front.classList.add("stack-front");
-    const tab = getTab(s);
-    tab.style.left = s.x + "px";
-    tab.style.top = (s.y - 26) + "px";
-    tab.style.zIndex = zb + 1;
-    const open = s.members.reduce((n, id) => n + topicById(id).tasks.filter(k => !k.done).length, 0);
-    tab.querySelector(".lbl").innerHTML = `Stack <b>${s.members.length}</b> &middot; ${open} open`;
-    tab.querySelector(".toggle").textContent = s.collapsed ? "Expand" : "Collapse";
-  }
-
-  function renderStacks() {
-    for (const [id, tab] of tabs) {
-      if (!data.stacks.some(s => s.id === id)) { tab.remove(); tabs.delete(id); }
-    }
-    data.stacks.forEach(layoutStack);
-    drawLinks(); drawMinimap(); updateStats();
-  }
-
-  function dissolveIfSmall(s) {
-    if (s.members.length >= 2) return;
-    s.members.forEach(resetCard);
-    data.stacks = data.stacks.filter(k => k !== s);
-  }
-
-  function detach(id) {
-    const s = stackOf(id);
-    if (!s) return;
-    s.members = s.members.filter(m => m !== id);
-    resetCard(id);
-    dissolveIfSmall(s);
-    renderStacks();
-  }
-
-  function joinStack(targetId, ids, fromStack) {
-    if (fromStack) data.stacks = data.stacks.filter(k => k !== fromStack);
-    const target = topicById(targetId);
-    let s = stackOf(targetId);
-    if (s) {
-      if (s.collapsed) s.members = [...ids, ...s.members];
-      else s.members.splice(s.members.indexOf(targetId) + 1, 0, ...ids);
-    } else {
-      s = { id: nextStackId++, x: target.x, y: target.y, members: [...ids, targetId], collapsed: true };
-      data.stacks.push(s);
-    }
-    renderStacks();
-  }
-
-  function dragStack(e, handle, s) {
-    let ox, oy;
-    const els = () => s.members.map(id => cards.get(id)).concat(getTab(s));
-    dragGesture(e, handle, {
-      start() { ox = s.x; oy = s.y; els().forEach(el => el.classList.add("dragging")); },
-      move(dx, dy, ev) {
-        s.x = ox + dx; s.y = oy + dy;
-        layoutStack(s); drawLinks(); drawMinimap();
-        highlightTarget(findTarget(ev, s.members));
-      },
-      end(ev) {
-        els().forEach(el => el.classList.remove("dragging"));
-        const target = findTarget(ev, s.members);
-        highlightTarget(null);
-        if (target != null) joinStack(target, s.members.slice(), s);
-        save();
-      },
-    });
-  }
-
-  function bringToTop(id) {
-    const s = stackOf(id);
-    if (!s) return;
-    s.members = [id, ...s.members.filter(m => m !== id)];
-    layoutStack(s); drawLinks(); drawMinimap();
-  }
-
-  function unstack(s) {
-    const x0 = s.x, y0 = s.y;
-    data.stacks = data.stacks.filter(k => k !== s);
-    s.members.forEach((id, i) => {
-      const t = topicById(id);
-      t.x = x0 + i * 272; t.y = y0;
-      resetCard(id);
-      const el = cards.get(id);
-      el.style.left = t.x + "px"; el.style.top = t.y + "px";
-    });
-    renderStacks(); save();
-  }
-
-  // Topic id under the pointer that the dragged thing would stack onto.
-  function findTarget(ev, exclude) {
-    for (const node of document.elementsFromPoint(ev.clientX, ev.clientY)) {
-      const card = node.closest && node.closest(".topic");
-      if (card) {
-        const id = +card.dataset.id;
-        if (!exclude.includes(id)) { const s = stackOf(id); return s && s.collapsed ? s.members[0] : id; }
-        continue;
-      }
-      const tab = node.closest && node.closest(".stack-tab");
-      if (tab) {
-        const s = data.stacks.find(k => tabs.get(k.id) === tab);
-        if (s && !s.members.some(m => exclude.includes(m))) return s.members[0];
-      }
-    }
-    return null;
-  }
-
-  let hovered = null;
-  function highlightTarget(id) {
-    if (hovered === id) return;
-    if (hovered != null && cards.get(hovered)) cards.get(hovered).classList.remove("drop-target");
-    hovered = id;
-    if (id != null) cards.get(id).classList.add("drop-target");
-  }
-
-  function drawLinks() {
-    const center = (id) => {
-      const t = data.topics.find(k => k.id === id), el = cards.get(id);
-      return t && el ? { x: t.x + el.offsetWidth / 2, y: t.y + el.offsetHeight / 2 } : null;
-    };
-    linksSvg.innerHTML = data.links.map(([a, b]) => {
-      const p = center(a), q = center(b);
-      if (!p || !q) return "";
-      const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2 - Math.abs(q.x - p.x) * 0.15;
-      return `<path d="M${p.x},${p.y} Q${mx},${my} ${q.x},${q.y}"/>`;
-    }).join("");
-  }
-
-  function addTopic(wx, wy) {
-    const t = {
-      id: nextId++, title: "New topic",
-      x: Math.round(wx - 124), y: Math.round(wy - 40),
-      color: COLORS[(nextId - 2) % COLORS.length], tasks: [],
-    };
-    data.topics.push(t);
-    renderCard(t); select(t.id); updateStats(); drawMinimap();
-    editTitle(cards.get(t.id), t);
-    save();
-  }
-
-  function updateStats() {
-    document.getElementById("ctopics").textContent = data.topics.length;
-    document.getElementById("copen").textContent = data.topics.reduce((n, t) => n + t.tasks.filter(k => !k.done).length, 0);
-  }
-
-  /* ---------- Minimap ---------- */
-  let miniMap = null;
-  function drawMinimap() {
-    const W = mini.width, H = mini.height;
-    mctx.clearRect(0, 0, W, H);
-    mctx.fillStyle = "#0a0e1a"; mctx.fillRect(0, 0, W, H);
-    const b = bounds();
-    const vw = viewport.clientWidth, vh = viewport.clientHeight;
-    const v0 = toWorld(0, 0), v1 = toWorld(vw, vh);
-    const x1 = Math.min(b.x, v0.x), y1 = Math.min(b.y, v0.y);
-    const x2 = Math.max(b.x + b.w, v1.x), y2 = Math.max(b.y + b.h, v1.y);
-    const pad = 16;
-    const k = Math.min((W - pad * 2) / (x2 - x1), (H - pad * 2) / (y2 - y1));
-    const ox = pad + ((W - pad * 2) - (x2 - x1) * k) / 2 - x1 * k;
-    const oy = pad + ((H - pad * 2) - (y2 - y1) * k) / 2 - y1 * k;
-    miniMap = { k, ox, oy };
-    for (const t of data.topics) {
-      const el = cards.get(t.id);
-      mctx.fillStyle = colorOf(t.color);
-      mctx.globalAlpha = t.id === selected ? 1 : 0.7;
-      mctx.fillRect(ox + t.x * k, oy + t.y * k, Math.max(3, (el ? el.offsetWidth : 248) * k), Math.max(2, (el ? el.offsetHeight : 160) * k));
-    }
-    mctx.globalAlpha = 1;
-    mctx.strokeStyle = "#dfe5f3"; mctx.lineWidth = 2;
-    mctx.strokeRect(ox + v0.x * k, oy + v0.y * k, (v1.x - v0.x) * k, (v1.y - v0.y) * k);
-  }
-  mini.addEventListener("click", (e) => {
-    if (!miniMap) return;
-    const r = mini.getBoundingClientRect();
-    const mx = (e.clientX - r.left) * (mini.width / r.width), my = (e.clientY - r.top) * (mini.height / r.height);
-    const wx = (mx - miniMap.ox) / miniMap.k, wy = (my - miniMap.oy) / miniMap.k;
-    view.x = viewport.clientWidth / 2 - wx * view.s;
-    view.y = viewport.clientHeight / 2 - wy * view.s;
-    applyView();
-  });
-
-  /* ---------- Pan / zoom ---------- */
+  /* ---------- Pan / zoom input ---------- */
   const pointers = new Map();
   let pan = null, pinch = null;
   viewport.addEventListener("pointerdown", (e) => {
-    if (e.target.closest(".topic")) return;
-    select(null);
-    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+    if (e.target.closest("input, button, .t-head, [contenteditable='true']")) return;
+    if (!e.target.closest(".tile")) select(null);
     viewport.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 1) {
@@ -859,7 +855,6 @@
   };
   viewport.addEventListener("pointerup", endPointer);
   viewport.addEventListener("pointercancel", endPointer);
-
   viewport.addEventListener("wheel", (e) => {
     e.preventDefault();
     const r = viewport.getBoundingClientRect();
@@ -869,56 +864,78 @@
       view.x -= e.deltaX; view.y -= e.deltaY; applyView();
     }
   }, { passive: false });
-
-  viewport.addEventListener("dblclick", (e) => {
-    if (e.target.closest(".topic")) return;
-    const r = viewport.getBoundingClientRect();
-    const w = toWorld(e.clientX - r.left, e.clientY - r.top);
-    addTopic(w.x, w.y);
-  });
+  viewport.addEventListener("dblclick", (e) => { if (!e.target.closest(".tile, .group")) relayout(); });
 
   /* ---------- Toolbar ---------- */
-  const centerScreen = () => [viewport.clientWidth / 2, viewport.clientHeight / 2];
-  document.getElementById("zoomIn").onclick = () => zoomAt(1.2, ...centerScreen());
-  document.getElementById("zoomOut").onclick = () => zoomAt(1 / 1.2, ...centerScreen());
-  document.getElementById("fit").onclick = fitAll;
-  document.getElementById("addTopic").onclick = () => { const c = toWorld(...centerScreen()); addTopic(c.x, c.y); };
+  const center = () => [viewport.clientWidth / 2, viewport.clientHeight / 2];
+  document.getElementById("zoomIn").onclick = () => zoomAt(1.25, ...center());
+  document.getElementById("zoomOut").onclick = () => zoomAt(1 / 1.25, ...center());
+  document.getElementById("fit").onclick = relayout;
+  const sizeBtns = { open: document.getElementById("sizeOpen"), all: document.getElementById("sizeAll") };
+  function setSizeBy(mode) {
+    data.sizeBy = mode;
+    for (const [m, b] of Object.entries(sizeBtns)) b.setAttribute("aria-pressed", String(m === mode));
+    save(); render();
+  }
+  sizeBtns.open.onclick = () => setSizeBy("open");
+  sizeBtns.all.onclick = () => setSizeBy("all");
+
+  document.getElementById("addTopic").onclick = () => {
+    const t = { id: nextId++, title: "New topic", color: COLORS[(nextId - 2) % COLORS.length], tasks: [] };
+    data.topics.push(t);
+    selected = t.id;
+    save(); render();
+    zoomTo(rects.get(t.id));
+    render();
+    const title = mapEl.querySelector(`.tile[data-id="${t.id}"] .t-title`);
+    if (title) editText(title, (v) => {
+      t.title = v || "Untitled topic";
+      addingFor = t.id; save(); render(); focusAdd();
+    });
+  };
   document.getElementById("reset").onclick = () => {
-    for (const el of cards.values()) el.remove();
-    for (const tab of tabs.values()) tab.remove();
-    cards.clear(); tabs.clear();
     data = sample();
     nextId = Math.max(...data.topics.map(t => t.id)) + 1;
-    nextStackId = Math.max(0, ...data.stacks.map(s => s.id)) + 1;
-    data.topics.forEach(renderCard);
-    renderStacks(); fitAll();
+    nextGroupId = Math.max(...data.groups.map(g => g.id)) + 1;
+    selected = null; addingFor = null;
+    setSizeBy(data.sizeBy);
+    relayout();
   };
-  const notes = document.getElementById("notes");
-  const toggle = document.getElementById("toggleNotes");
-  if (window.innerWidth <= 720) { notes.hidden = true; toggle.setAttribute("aria-expanded", "false"); }
-  toggle.onclick = () => {
-    notes.hidden = !notes.hidden;
-    toggle.setAttribute("aria-expanded", String(!notes.hidden));
-  };
+  function panelToggle(btnId, panel) {
+    const btn = document.getElementById(btnId);
+    const sync = () => btn.setAttribute("aria-pressed", String(!panel.hidden));
+    btn.onclick = () => {
+      panel.hidden = !panel.hidden;
+      if (window.innerWidth <= 720 && !panel.hidden) {
+        (panel === listPanel ? notesPanel : listPanel).hidden = true;
+      }
+      document.querySelectorAll("#toggleList, #toggleNotes").forEach(b => b.setAttribute("aria-pressed",
+        String(!(b.id === "toggleList" ? listPanel : notesPanel).hidden)));
+      relayout();
+    };
+    sync();
+  }
+  if (window.innerWidth <= 720) { listPanel.hidden = true; notesPanel.hidden = true; }
+  panelToggle("toggleList", listPanel);
+  panelToggle("toggleNotes", notesPanel);
+
   window.addEventListener("keydown", (e) => {
     if (e.target.closest("input, [contenteditable='true']")) return;
-    if (e.key === "Delete" || e.key === "Backspace") {
-      if (selected == null) return;
+    if ((e.key === "Delete" || e.key === "Backspace") && selected != null) {
       const id = selected;
-      detach(id);
       data.topics = data.topics.filter(t => t.id !== id);
-      data.links = data.links.filter(([a, b]) => a !== id && b !== id);
-      cards.get(id).remove(); cards.delete(id); selected = null;
-      drawLinks(); updateStats(); drawMinimap(); save();
-    }
+      data.groups.forEach(g => { g.members = g.members.filter(m => m !== id); });
+      data.groups = data.groups.filter(g => g.members.length >= 2);
+      selected = null;
+      save(); render();
+    } else if (e.key === "Escape") select(null);
   });
 
   /* ---------- Boot ---------- */
   sizeStars();
-  data.topics.forEach(renderCard);
-  renderStacks();
-  if (data.view) applyView(); else fitAll();
-  window.addEventListener("resize", () => { sizeStars(); applyView(); });
-  document.fonts && document.fonts.ready.then(renderStacks);
+  for (const [m, b] of Object.entries(sizeBtns)) b.setAttribute("aria-pressed", String(m === data.sizeBy));
+  relayout();
+  window.addEventListener("resize", () => { sizeStars(); relayout(); });
+  document.fonts && document.fonts.ready.then(render);
 })();
 </script>
