@@ -23,6 +23,9 @@
     --c-mint: #8fdcbc;
     --c-rose: #e79cc8;
     --c-violet: #b3a2ff;
+    --c-coral: #ff9580;
+    --c-teal: #6fd3e0;
+    --c-lime: #c8e27c;
     --sans: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   }
@@ -79,6 +82,37 @@
     font: 500 11px var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden;
     font-variant-numeric: tabular-nums;
   }
+  .group.tinted {
+    border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+    background: color-mix(in srgb, var(--accent) 9%, rgba(22, 29, 50, 0.55));
+  }
+  .g-swatch {
+    flex: none; width: 12px; height: 12px; padding: 0; border-radius: 50%; cursor: pointer;
+    border: 1.5px solid var(--muted);
+    background: conic-gradient(var(--c-blue) 0 25%, var(--c-amber) 0 50%, var(--c-mint) 0 75%, var(--c-rose) 0);
+  }
+  .tinted .g-swatch, .g-swatch.set { background: var(--accent); border-color: var(--text); }
+  .g-swatch:hover { transform: scale(1.2); }
+  .row .sw.pick { cursor: pointer; border-radius: 50%; width: 10px; height: 10px; }
+  .row .sw.pick:hover { outline: 1px solid var(--text); outline-offset: 1px; }
+  .picker {
+    position: fixed; z-index: 1000; width: 208px; box-sizing: border-box;
+    background: var(--surface-solid); border: 1px solid var(--line-strong); border-radius: 10px;
+    padding: 10px; box-shadow: 0 16px 40px rgba(0, 0, 0, .55);
+    font-size: 12px; color: var(--muted);
+  }
+  .picker .p-title { font: 500 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+  .picker .p-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+  .picker .p-sw {
+    width: 20px; height: 20px; padding: 0; border-radius: 50%; cursor: pointer;
+    border: 2px solid transparent; background: var(--c);
+  }
+  .picker .p-sw[aria-pressed="true"] { border-color: var(--text); }
+  .picker .p-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .picker .p-row label { flex: 1; }
+  .picker input[type="color"] { width: 32px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: none; cursor: pointer; }
+  .picker .p-reset { width: 100%; margin-top: 10px; text-align: left; }
+  .picker .p-reset[aria-pressed="true"] { color: var(--text); background: var(--surface-2); }
   .g-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; border-radius: 3px; }
   .g-name[contenteditable="true"] { background: var(--surface-2); outline: 1px solid var(--line-strong); padding: 0 4px; cursor: text; }
   .g-label .spacer { flex: 1; }
@@ -302,6 +336,7 @@
       <li>Double-click a tile to zoom in; small cells show their text as you zoom</li>
       <li>Drag the map to pan; scroll or pinch to zoom</li>
       <li>Double-click a topic or group name to rename it</li>
+      <li>Click the dot next to a group name (here or in the List) to change its colour</li>
       <li>Select a topic and press <kbd>Delete</kbd> to remove it</li>
     </ul>
     <h3>Open questions</h3>
@@ -317,10 +352,13 @@
 <script>
 (function () {
   const COLORS = ["--c-blue", "--c-amber", "--c-mint", "--c-rose", "--c-violet"];
+  const GROUP_COLORS = ["--c-blue", "--c-teal", "--c-mint", "--c-lime", "--c-amber", "--c-coral", "--c-rose", "--c-violet"];
   const STORE_KEY = "orbit-wireframe-v3";
   const PATH_H = 30;
   const css = getComputedStyle(document.documentElement);
-  const colorOf = (v) => css.getPropertyValue(v).trim();
+  // Colours are stored as a palette token ("--c-blue") or, for custom picks, a hex value.
+  const colorOf = (v) => v && v.startsWith("--") ? css.getPropertyValue(v).trim() : v;
+  const topicColor = (t) => { const g = data.groups.find(x => x.members.includes(t.id)); return colorOf(g && g.color || t.color); };
   const tasks = (list) => list.map(([t, done]) => ({ t, done: !!done }));
 
   const sample = () => ({
@@ -348,7 +386,7 @@
     ],
     groups: [
       { id: 1, name: "Pricemetry", members: [1, 2, 3] },
-      { id: 2, name: "Side projects", members: [4, 5] },
+      { id: 2, name: "Side projects", members: [4, 5], color: "--c-teal" },
     ],
   });
 
@@ -457,19 +495,21 @@
     const k = view.s;
     rects.set("g" + g.id, b);
     const el = document.createElement("div");
-    el.className = "group";
+    el.className = "group" + (g.color ? " tinted" : "");
+    if (g.color) el.style.setProperty("--accent", colorOf(g.color));
     el.dataset.gid = g.id;
     box(el, b);
     const labelH = b.w * k >= 90 && b.h * k >= 60 ? 22 : 0;
     if (labelH) {
       const open = g.members.reduce((n, id) => n + openCount(topicById(id)), 0);
-      el.innerHTML = `<div class="g-label"><span class="g-name"></span><span>${g.members.length} &middot; ${open} open</span><span class="spacer"></span><button class="tab-btn" type="button">Ungroup</button></div>`;
+      el.innerHTML = `<div class="g-label"><button class="g-swatch" type="button" aria-label="Group colour" title="Change group colour"></button><span class="g-name"></span><span>${g.members.length} &middot; ${open} open</span><span class="spacer"></span><button class="tab-btn" type="button">Ungroup</button></div>`;
       const name = el.querySelector(".g-name");
       name.textContent = g.name;
       name.addEventListener("dblclick", (e) => {
         e.stopPropagation();
         editText(name, (v) => { g.name = v || "Untitled group"; save(); render(); });
       });
+      el.querySelector(".g-swatch").addEventListener("click", (e) => openPicker(g, e.currentTarget));
       el.querySelector(".tab-btn").addEventListener("click", () => {
         data.groups = data.groups.filter(x => x !== g); save(); render();
       });
@@ -487,7 +527,7 @@
     const el = document.createElement("div");
     el.className = "tile";
     el.dataset.id = t.id;
-    el.style.setProperty("--accent", colorOf(t.color));
+    el.style.setProperty("--accent", topicColor(t));
     box(el, b);
     const showHead = b.w * k >= 76 && b.h * k >= 50;
     const open = openCount(t);
@@ -598,7 +638,7 @@
     const total = data.topics.reduce((s, t) => s + weightOf(t), 0) || 1;
     const topicRow = (t, child) => {
       const pct = weightOf(t) / total * 100;
-      return `<div class="row${child ? " child" : ""}" data-id="${t.id}" style="--accent:${colorOf(t.color)}">
+      return `<div class="row${child ? " child" : ""}" data-id="${t.id}" style="--accent:${topicColor(t)}">
         <span class="sw"></span><span class="nm"></span>
         <span class="pbar"><i style="width:${pct.toFixed(1)}%"></i></span><span class="n">${openCount(t)}</span></div>`;
     };
@@ -612,7 +652,7 @@
       if (r.t) { html += topicRow(r.t, false); names.push(r.t.title); continue; }
       const pct = r.w / total * 100;
       const open = r.g.members.reduce((n, id) => n + openCount(topicById(id)), 0);
-      html += `<div class="row group-row" data-gid="${r.g.id}"><span class="sw"></span><span class="nm"></span>
+      html += `<div class="row group-row" data-gid="${r.g.id}"${r.g.color ? ` style="--accent:${colorOf(r.g.color)}"` : ""}><span class="sw pick" role="button" tabindex="0" aria-label="Group colour" title="Change group colour"></span><span class="nm"></span>
         <span class="pbar"><i style="width:${pct.toFixed(1)}%"></i></span><span class="n">${open}</span></div>`;
       names.push(r.g.name);
       const kids = r.g.members.map(topicById).sort((a, b) => weightOf(b) - weightOf(a));
@@ -627,6 +667,13 @@
         : mapEl.querySelector(`.group[data-gid="${row.dataset.gid}"]`);
       row.addEventListener("mouseenter", () => { const el = target(); if (el) el.classList.add("hl"); });
       row.addEventListener("mouseleave", () => { const el = target(); if (el) el.classList.remove("hl"); });
+      const pick = row.querySelector(".sw.pick");
+      if (pick) {
+        const g = data.groups.find(x => x.id === +row.dataset.gid);
+        const openIt = (e) => { e.stopPropagation(); openPicker(g, pick); };
+        pick.addEventListener("click", openIt);
+        pick.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openIt(e); } });
+      }
       row.addEventListener("click", () => {
         if (row.dataset.id) select(+row.dataset.id);
         const r = rects.get(key);
@@ -666,7 +713,7 @@
         el.classList.add("dragging");
         ghost = document.createElement("div");
         ghost.className = "ghost";
-        ghost.style.setProperty("--accent", colorOf(t.color));
+        ghost.style.setProperty("--accent", topicColor(t));
         ghost.innerHTML = `<span class="t-dot"></span><span></span>`;
         ghost.lastChild.textContent = t.title;
         document.body.appendChild(ghost);
@@ -739,6 +786,40 @@
       const name = mapEl.querySelector(`.group[data-gid="${renameGroup.id}"] .g-name`);
       if (name) editText(name, (v) => { renameGroup.name = v || "Untitled group"; save(); render(); });
     }
+  }
+
+  /* ---------- Group colour picker ---------- */
+  let picker = null;
+  function closePicker() {
+    if (!picker) return;
+    picker.remove(); picker = null;
+    document.removeEventListener("pointerdown", outside, true);
+  }
+  function outside(e) { if (picker && !picker.contains(e.target)) closePicker(); }
+  function openPicker(g, anchor) {
+    closePicker();
+    picker = document.createElement("div");
+    picker.className = "picker";
+    picker.setAttribute("role", "dialog");
+    picker.setAttribute("aria-label", "Group colour");
+    const custom = g.color && !g.color.startsWith("--") ? g.color : "#7fb4ff";
+    picker.innerHTML = `<div class="p-title">Colour for <span></span></div>
+      <div class="p-grid">${GROUP_COLORS.map(c => `<button class="p-sw" type="button" data-c="${c}" style="--c:var(${c})" aria-label="${c.slice(4)}" aria-pressed="${g.color === c}"></button>`).join("")}</div>
+      <div class="p-row"><label for="pick-custom">Custom colour</label><input type="color" id="pick-custom" value="${custom}"></div>
+      <button class="btn p-reset" type="button" aria-pressed="${!g.color}">Use each topic's own colour</button>`;
+    picker.querySelector(".p-title span").textContent = g.name;
+    const apply = (c) => { g.color = c; save(); render(); };
+    picker.querySelectorAll(".p-sw").forEach(b => b.addEventListener("click", () => { apply(b.dataset.c); closePicker(); }));
+    picker.querySelector("#pick-custom").addEventListener("input", (e) => apply(e.target.value));
+    picker.querySelector(".p-reset").addEventListener("click", () => { apply(null); closePicker(); });
+    document.body.appendChild(picker);
+    const a = anchor.getBoundingClientRect();
+    const left = Math.min(window.innerWidth - picker.offsetWidth - 8, Math.max(8, a.left - 8));
+    const top = a.bottom + 8 + picker.offsetHeight > window.innerHeight ? a.top - picker.offsetHeight - 8 : a.bottom + 8;
+    picker.style.left = left + "px";
+    picker.style.top = Math.max(8, top) + "px";
+    setTimeout(() => document.addEventListener("pointerdown", outside, true), 0);
+    picker.querySelector(".p-sw").focus();
   }
 
   /* ---------- Starfield (parallax, screen space) ---------- */
@@ -928,7 +1009,7 @@
       data.groups = data.groups.filter(g => g.members.length >= 2);
       selected = null;
       save(); render();
-    } else if (e.key === "Escape") select(null);
+    } else if (e.key === "Escape") { closePicker(); select(null); }
   });
 
   /* ---------- Boot ---------- */
