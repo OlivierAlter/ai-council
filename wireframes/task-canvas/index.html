@@ -92,7 +92,10 @@
     background: conic-gradient(var(--c-blue) 0 25%, var(--c-amber) 0 50%, var(--c-mint) 0 75%, var(--c-rose) 0);
   }
   .tinted .g-swatch, .g-swatch.set { background: var(--accent); border-color: var(--text); }
-  .g-swatch:hover { transform: scale(1.2); }
+  .g-swatch:hover, button.t-dot:hover { transform: scale(1.3); }
+  /* Invisible padding so the small dots are easy to hit with a mouse or finger. */
+  .g-swatch, button.t-dot { position: relative; }
+  .g-swatch::before, button.t-dot::before { content: ""; position: absolute; inset: -8px; border-radius: 50%; }
   .row .sw.pick { cursor: pointer; border-radius: 50%; width: 10px; height: 10px; }
   .row .sw.pick:hover { outline: 1px solid var(--text); outline-offset: 1px; }
   .picker {
@@ -141,7 +144,8 @@
     display: flex; align-items: center; gap: 8px; padding: 0 5px 0 10px;
     cursor: grab; user-select: none;
   }
-  .t-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+  .t-dot { flex: none; width: 10px; height: 10px; padding: 0; border: 0; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+  button.t-dot { cursor: pointer; }
   .t-title {
     flex: 1; min-width: 0; font-weight: 700; font-size: 13.5px; letter-spacing: .01em;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 4px;
@@ -336,7 +340,7 @@
       <li>Double-click a tile to zoom in; small cells show their text as you zoom</li>
       <li>Drag the map to pan; scroll or pinch to zoom</li>
       <li>Double-click a topic or group name to rename it</li>
-      <li>Click the dot next to a group name (here or in the List) to change its colour</li>
+      <li>Click any colour dot (on a topic, a group, or in the List) to change its colour</li>
       <li>Select a topic and press <kbd>Delete</kbd> to remove it</li>
     </ul>
     <h3>Open questions</h3>
@@ -534,7 +538,7 @@
     el.title = `${t.title} · ${open} open of ${t.tasks.length}`;
 
     if (showHead) {
-      el.innerHTML = `<div class="t-head"><span class="t-dot"></span><span class="t-title"></span><span class="t-count">${t.tasks.length - open}/${t.tasks.length}</span><button class="t-plus" type="button" aria-label="Add task">+</button></div><div class="t-bar"><i></i></div>`;
+      el.innerHTML = `<div class="t-head"><button class="t-dot" type="button" aria-label="Change colour" title="Change colour"></button><span class="t-title"></span><span class="t-count">${t.tasks.length - open}/${t.tasks.length}</span><button class="t-plus" type="button" aria-label="Add task">+</button></div><div class="t-bar"><i></i></div>`;
       el.querySelector(".t-title").textContent = t.title;
       el.querySelector(".t-bar i").style.width = t.tasks.length ? ((t.tasks.length - open) / t.tasks.length * 100) + "%" : "0%";
       const head = el.querySelector(".t-head");
@@ -548,6 +552,7 @@
         e.stopPropagation();
         editText(e.currentTarget, (v) => { t.title = v || "Untitled topic"; save(); render(); });
       });
+      el.querySelector(".t-dot").addEventListener("click", (e) => pickFor(t, e.currentTarget));
       el.querySelector(".t-plus").addEventListener("click", () => { addingFor = t.id; render(); focusAdd(); });
     }
 
@@ -639,7 +644,7 @@
     const topicRow = (t, child) => {
       const pct = weightOf(t) / total * 100;
       return `<div class="row${child ? " child" : ""}" data-id="${t.id}" style="--accent:${topicColor(t)}">
-        <span class="sw"></span><span class="nm"></span>
+        <span class="sw pick" role="button" tabindex="0" aria-label="Change colour" title="Change colour"></span><span class="nm"></span>
         <span class="pbar"><i style="width:${pct.toFixed(1)}%"></i></span><span class="n">${openCount(t)}</span></div>`;
     };
     const roots = [
@@ -669,8 +674,11 @@
       row.addEventListener("mouseleave", () => { const el = target(); if (el) el.classList.remove("hl"); });
       const pick = row.querySelector(".sw.pick");
       if (pick) {
-        const g = data.groups.find(x => x.id === +row.dataset.gid);
-        const openIt = (e) => { e.stopPropagation(); openPicker(g, pick); };
+        const openIt = (e) => {
+          e.stopPropagation();
+          if (row.dataset.gid) openPicker(data.groups.find(x => x.id === +row.dataset.gid), pick, true);
+          else pickFor(topicById(+row.dataset.id), pick);
+        };
         pick.addEventListener("click", openIt);
         pick.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openIt(e); } });
       }
@@ -796,22 +804,29 @@
     document.removeEventListener("pointerdown", outside, true);
   }
   function outside(e) { if (picker && !picker.contains(e.target)) closePicker(); }
-  function openPicker(g, anchor) {
+  // A topic inside a coloured group shows the group's colour, so its dot edits the group.
+  function pickFor(t, anchor) {
+    const g = groupOf(t.id);
+    if (g && g.color) openPicker(g, anchor, true);
+    else openPicker(t, anchor, false);
+  }
+  function openPicker(g, anchor, isGroup) {
     closePicker();
     picker = document.createElement("div");
     picker.className = "picker";
     picker.setAttribute("role", "dialog");
     picker.setAttribute("aria-label", "Group colour");
-    const custom = g.color && !g.color.startsWith("--") ? g.color : "#7fb4ff";
+    const custom = g.color && !g.color.startsWith("--") ? g.color : (colorOf(g.color) || "#7fb4ff");
     picker.innerHTML = `<div class="p-title">Colour for <span></span></div>
       <div class="p-grid">${GROUP_COLORS.map(c => `<button class="p-sw" type="button" data-c="${c}" style="--c:var(${c})" aria-label="${c.slice(4)}" aria-pressed="${g.color === c}"></button>`).join("")}</div>
       <div class="p-row"><label for="pick-custom">Custom colour</label><input type="color" id="pick-custom" value="${custom}"></div>
-      <button class="btn p-reset" type="button" aria-pressed="${!g.color}">Use each topic's own colour</button>`;
-    picker.querySelector(".p-title span").textContent = g.name;
+      ${isGroup ? `<button class="btn p-reset" type="button" aria-pressed="${!g.color}">Use each topic's own colour</button>` : ""}`;
+    picker.querySelector(".p-title span").textContent = isGroup ? g.name + " (group)" : g.title;
     const apply = (c) => { g.color = c; save(); render(); };
     picker.querySelectorAll(".p-sw").forEach(b => b.addEventListener("click", () => { apply(b.dataset.c); closePicker(); }));
     picker.querySelector("#pick-custom").addEventListener("input", (e) => apply(e.target.value));
-    picker.querySelector(".p-reset").addEventListener("click", () => { apply(null); closePicker(); });
+    const reset = picker.querySelector(".p-reset");
+    if (reset) reset.addEventListener("click", () => { apply(null); closePicker(); });
     document.body.appendChild(picker);
     const a = anchor.getBoundingClientRect();
     const left = Math.min(window.innerWidth - picker.offsetWidth - 8, Math.max(8, a.left - 8));
