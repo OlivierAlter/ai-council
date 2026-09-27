@@ -96,7 +96,7 @@
   .g-swatch:hover, button.t-dot:hover { transform: scale(1.3); }
   /* Invisible padding so the small dots are easy to hit with a mouse or finger. */
   .g-swatch, button.t-dot { position: relative; }
-  .g-swatch::before, button.t-dot::before { content: ""; position: absolute; inset: -8px; border-radius: 50%; }
+  .g-swatch::before, button.t-dot::before { content: ""; position: absolute; inset: -5px; border-radius: 50%; }
   .row .sw.pick { cursor: pointer; border-radius: 50%; width: 10px; height: 10px; }
   .row .sw.pick:hover { outline: 1px solid var(--text); outline-offset: 1px; }
   .picker {
@@ -395,7 +395,7 @@
       <li>Drag a topic's header onto another topic to group them</li>
       <li>Drag a topic onto the top bar to take it out of its group</li>
       <li>Double-click a tile to zoom in; small cells show their text as you zoom</li>
-      <li>Drag the map to pan; scroll or pinch to zoom</li>
+      <li>Drag or scroll to pan; <kbd>&#8984;</kbd> + scroll (<kbd>Ctrl</kbd> on Windows) or pinch to zoom</li>
       <li>Double-click a topic or group name to rename it</li>
       <li>Click any colour dot (on a topic, a group, or in the List) to change its colour</li>
       <li>Select a topic and press <kbd>Delete</kbd> to remove it</li>
@@ -613,7 +613,7 @@
       el.querySelector(".t-bar i").style.width = t.tasks.length ? ((t.tasks.length - open) / t.tasks.length * 100) + "%" : "0%";
       const head = el.querySelector(".t-head");
       head.addEventListener("pointerdown", (e) => {
-        if (e.button !== 0 || e.target.closest("button, [contenteditable='true']")) return;
+        if (e.button !== 0 || e.target.closest(".t-plus, [contenteditable='true']")) return;
         e.stopPropagation();
         select(t.id);
         dragTopic(e, head, t, el);
@@ -622,7 +622,8 @@
         e.stopPropagation();
         editText(e.currentTarget, (v) => { t.title = v || "Untitled topic"; save(); render(); });
       });
-      el.querySelector(".t-dot").addEventListener("click", (e) => pickFor(t, e.currentTarget));
+      // Mouse taps on the dot arrive through the drag handler (tap); this covers the keyboard.
+      el.querySelector(".t-dot").addEventListener("click", (e) => { if (!justDragged && !picker) pickFor(t, e.currentTarget); });
       el.querySelector(".t-plus").addEventListener("click", () => { addingFor = t.id; render(); focusAdd(); });
     }
 
@@ -778,15 +779,19 @@
       handle.removeEventListener("pointerup", up);
       handle.removeEventListener("pointercancel", up);
       if (started) h.end(ev);
+      else if (h.tap) h.tap(ev);
     };
     handle.addEventListener("pointermove", move);
     handle.addEventListener("pointerup", up);
     handle.addEventListener("pointercancel", up);
   }
 
+  let justDragged = false;
   function dragTopic(e, head, t, el) {
     let ghost;
+    const dot = e.target.closest(".t-dot");
     dragGesture(e, head, {
+      tap() { if (dot) { justDragged = true; setTimeout(() => { justDragged = false; }, 0); pickFor(t, dot); } },
       start() {
         el.classList.add("dragging");
         ghost = document.createElement("div");
@@ -803,6 +808,8 @@
       },
       end(ev) {
         const target = findTarget(ev, t.id);
+        justDragged = true;
+        setTimeout(() => { justDragged = false; }, 0);
         highlight(null);
         ghost.remove();
         el.classList.remove("dragging");
@@ -1207,8 +1214,10 @@
   viewport.addEventListener("wheel", (e) => {
     e.preventDefault();
     const r = viewport.getBoundingClientRect();
-    if (e.ctrlKey || !e.deltaX && Math.abs(e.deltaY) >= 50) {
-      zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);
+    // Cmd + scroll (Ctrl on Windows, and trackpad pinch, which reports ctrlKey) zooms; plain scroll pans.
+    if (e.metaKey || e.ctrlKey) {
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+      zoomAt(Math.exp(-dy * (Math.abs(dy) < 40 ? 0.01 : 0.0025)), e.clientX - r.left, e.clientY - r.top);
     } else {
       view.x -= e.deltaX; view.y -= e.deltaY; applyView();
     }
