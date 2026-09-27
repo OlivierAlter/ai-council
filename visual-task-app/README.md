@@ -5,7 +5,8 @@ disk-space treemap (in the style of WizTree): each topic's area is its share of 
 and each small cell inside it is one task.
 
 Status: concept wireframe. Everything is in a single `index.html` with no build step or
-dependencies. Data is saved only in your browser's `localStorage`.
+dependencies. Data is saved only in your browser's `localStorage`. The app starts empty;
+**Clear all** (click twice) wipes every topic, group and task.
 
 ## Run it
 

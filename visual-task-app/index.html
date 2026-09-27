@@ -71,6 +71,13 @@
   }
   .map-path b { color: var(--text); font-weight: 500; }
 
+  .map-empty {
+    position: absolute; inset: 0; display: grid; place-content: center; gap: 6px; text-align: center;
+    border: 1px dashed var(--line-strong); border-radius: 8px; color: var(--muted); font-size: 13px;
+  }
+  .map-empty b { color: var(--text); font-size: 16px; }
+  .map-empty kbd { font: 400 12px var(--mono); color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+
   /* ---------- Groups ---------- */
   .group {
     position: absolute; box-sizing: border-box;
@@ -409,7 +416,7 @@
     <div class="sep"></div>
     <button class="btn" id="toggleList" type="button" aria-pressed="true">List</button>
     <button class="btn" id="toggleNotes" type="button" aria-pressed="true">Notes</button>
-    <button class="btn hide-sm" id="reset" type="button">Reset sample</button>
+    <button class="btn hide-sm" id="reset" type="button">Clear all</button>
   </div>
 
   <aside class="panel list" id="list" aria-label="Topic list">
@@ -420,7 +427,7 @@
   <aside class="panel notes" id="notes">
     <span class="tag">Wireframe</span>
     <h2>Topic map</h2>
-    <p style="margin:6px 0 0">Topics tile together like a disk-space map. A topic's area is its share of the work, so the biggest block is where most of your open tasks are. Each small cell inside is one task. The topics shown are sample placeholders.</p>
+    <p style="margin:6px 0 0">Topics tile together like a disk-space map. A topic's area is its share of the work, so the biggest block is where most of your open tasks are. Each small cell inside is one task.</p>
     <h3>Try it</h3>
     <ul>
       <li>Start typing anywhere to add a task: <kbd>Call the bank @ Admin</kbd>. After <kbd>@</kbd>, pick a topic with <kbd>&uarr;</kbd> <kbd>&darr;</kbd> and <kbd>Tab</kbd></li>
@@ -461,7 +468,7 @@
 (function () {
   const COLORS = ["--c-blue", "--c-amber", "--c-mint", "--c-rose", "--c-violet"];
   const GROUP_COLORS = ["--c-blue", "--c-teal", "--c-mint", "--c-lime", "--c-amber", "--c-coral", "--c-rose", "--c-violet"];
-  const STORE_KEY = "orbit-wireframe-v3";
+  const STORE_KEY = "orbit-v4";
   const PATH_H = 30;
   const css = getComputedStyle(document.documentElement);
   // Colours are stored as a palette token ("--c-blue") or, for custom picks, a hex value.
@@ -469,34 +476,8 @@
   const topicColor = (t) => { const g = data.groups.find(x => x.members.includes(t.id)); return colorOf(g && g.color || t.color); };
   const tasks = (list) => list.map(([t, done]) => ({ t, done: !!done }));
 
-  const sample = () => ({
-    sizeBy: "open",
-    topics: [
-      { id: 1, title: "Q4 roadmap", color: "--c-blue", tasks: tasks([
-        ["Draft pricing-model v2 spec", 1], ["Review competitor scrape results"], ["Plan October release"],
-        ["Write release notes"], ["Customer interviews x3"], ["Update pricing page copy"], ["Set Q4 OKRs", 1] ]) },
-      { id: 2, title: "Hiring", color: "--c-amber", tasks: tasks([
-        ["Write data engineer job post", 1], ["Screen 4 candidates"], ["Book onsite interviews"], ["Reference checks"] ]) },
-      { id: 3, title: "Pricing research", color: "--c-violet", tasks: tasks([
-        ["Elasticity model for retail"], ["Clean scraped price history"], ["Benchmark vs. 3 competitors"],
-        ["Summarise findings deck"], ["Share with sales", 1] ]) },
-      { id: 4, title: "AI Council app", color: "--c-rose", tasks: tasks([
-        ["Finish WebSocket SDK tests", 1], ["Scheduler package cleanup"], ["Deploy to staging"],
-        ["Write DEPLOY.md checklist", 1] ]) },
-      { id: 5, title: "Visual task app", color: "--c-mint", tasks: tasks([
-        ["Wireframe the canvas", 1], ["Try treemap layout", 1], ["Decide on data storage"], ["Pick sizing rule"] ]) },
-      { id: 6, title: "Admin & personal", color: "--c-amber", tasks: tasks([
-        ["Quarterly VAT filing"], ["Renew passport"], ["Book dentist", 1] ]) },
-      { id: 7, title: "Reading list", color: "--c-blue", tasks: tasks([
-        ["Pricing strategy notes"], ["Spatial UI essays", 1] ]) },
-      { id: 8, title: "Health", color: "--c-mint", tasks: tasks([
-        ["Run 3x this week"], ["Sleep before midnight", 1] ]) },
-    ],
-    groups: [
-      { id: 1, name: "Pricemetry", members: [1, 2, 3] },
-      { id: 2, name: "Side projects", members: [4, 5], color: "--c-teal" },
-    ],
-  });
+  // Start from a clean slate: no topics, groups or tasks.
+  const emptyMap = () => ({ sizeBy: "open", topics: [], groups: [] });
 
   function load() {
     try { const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
@@ -507,7 +488,7 @@
     saveTimer = setTimeout(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) {} }, 250);
   }
 
-  let data = load() || sample();
+  let data = load() || emptyMap();
   let nextId = Math.max(0, ...data.topics.map(t => t.id)) + 1;
   let nextGroupId = Math.max(0, ...data.groups.map(g => g.id)) + 1;
   const view = { x: 0, y: 0, s: 1 };
@@ -595,6 +576,12 @@
       const b = inset(r, 2);
       if (r.item.kind === "t") drawTopic(r.item.t, b);
       else drawGroup(r.item.g, b);
+    }
+    if (!data.topics.length) {
+      const empty = document.createElement("div");
+      empty.className = "map-empty";
+      empty.innerHTML = `<b>Empty sky</b><span>Start typing to add your first task, e.g. <kbd>Plan the launch @ Work</kbd></span><span>or use + Topic.</span>`;
+      mapEl.appendChild(empty);
     }
     renderList();
     markSelected();
@@ -1392,10 +1379,20 @@
       addingFor = t.id; save(); render(); focusAdd();
     });
   };
-  document.getElementById("reset").onclick = () => {
-    data = sample();
-    nextId = Math.max(...data.topics.map(t => t.id)) + 1;
-    nextGroupId = Math.max(...data.groups.map(g => g.id)) + 1;
+  // confirm() is blocked in the viewer, so clearing takes a second click.
+  const resetBtn = document.getElementById("reset");
+  let armed = null;
+  resetBtn.onclick = () => {
+    if (!armed) {
+      resetBtn.textContent = "Click again to clear";
+      armed = setTimeout(() => { armed = null; resetBtn.textContent = "Clear all"; }, 3000);
+      return;
+    }
+    clearTimeout(armed); armed = null;
+    resetBtn.textContent = "Clear all";
+    data = emptyMap();
+    nextId = 1;
+    nextGroupId = 1;
     selected = null; addingFor = null;
     setSizeBy(data.sizeBy);
     relayout();
