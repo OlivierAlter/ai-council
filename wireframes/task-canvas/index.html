@@ -30,6 +30,7 @@
     --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   }
   html, body { height: 100%; }
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     background: var(--void);
@@ -279,15 +280,70 @@
   .row .pbar i { display: block; height: 100%; background: var(--accent, var(--muted)); }
   .row .n { font: 500 11px var(--mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
 
+  /* ---------- Quick add (type anywhere) ---------- */
+  .quick {
+    position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 20;
+    width: min(560px, calc(100% - 32px));
+  }
+  .q-box {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(13, 18, 32, 0.92); border: 1px solid var(--line); border-radius: 12px;
+    padding: 0 8px 0 12px; height: 42px; backdrop-filter: blur(8px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .4);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .quick.active .q-box { border-color: var(--c-blue); box-shadow: 0 0 0 1px var(--c-blue), 0 14px 40px rgba(0, 0, 0, .55); }
+  .q-plus { color: var(--c-blue); font-weight: 700; font-size: 17px; line-height: 1; }
+  .q-box input {
+    flex: 1; min-width: 0; height: 100%; border: 0; background: none; outline: none;
+    font-size: 14px; color: var(--text);
+  }
+  .q-box input::placeholder { color: var(--muted); }
+  .q-box kbd { font: 400 11px var(--mono); color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  .q-preview { margin: 6px 4px 0; font-size: 12px; color: var(--muted); min-height: 16px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .q-preview b { color: var(--text); font-weight: 600; }
+  .q-preview .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; }
+  .quick:not(.active) .q-preview { display: none; }
+  .q-suggest {
+    position: absolute; left: 0; right: 0; bottom: calc(100% + 8px);
+    background: var(--surface-solid); border: 1px solid var(--line-strong); border-radius: 10px;
+    padding: 4px; box-shadow: 0 16px 40px rgba(0, 0, 0, .55);
+    max-height: 280px; overflow: auto;
+  }
+  .q-head { font: 500 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding: 6px 8px 4px; }
+  .q-item {
+    display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 6px;
+    cursor: pointer; font-size: 13px;
+  }
+  .q-item[aria-selected="true"] { background: var(--surface-2); }
+  .q-item .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .q-item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .q-item .t mark { background: none; color: var(--accent); font-weight: 700; }
+  .q-item .g { font: 400 11px var(--mono); color: var(--muted); white-space: nowrap; }
+  .q-item.create .dot { background: none; border: 1.5px dashed var(--muted); box-shadow: none; }
+  .toast {
+    position: absolute; left: 50%; bottom: 86px; transform: translateX(-50%); z-index: 21;
+    background: var(--surface-solid); border: 1px solid var(--line-strong); border-radius: 8px;
+    padding: 6px 12px; font-size: 12.5px; color: var(--text); white-space: nowrap;
+    display: flex; align-items: center; gap: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  }
+  .toast .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .tile.flash { animation: flash 1.1s ease-out; }
+  @keyframes flash {
+    0% { box-shadow: 0 0 0 3px var(--accent), 0 0 40px 4px var(--accent); }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+
   @media (max-width: 720px) {
     .top-left { right: 16px; }
     .top-right { top: 70px; left: 16px; right: auto; }
     .hide-sm { display: none; }
-    .notes { left: 16px; right: 16px; width: auto; top: auto; bottom: 16px; max-height: 45%; z-index: 5; }
-    .list { left: 16px; right: 16px; width: auto; top: auto; bottom: 16px; max-height: 45%; z-index: 5; }
+    .notes { left: 16px; right: 16px; width: auto; top: auto; bottom: 72px; max-height: 45%; z-index: 5; }
+    .list { left: 16px; right: 16px; width: auto; top: auto; bottom: 72px; max-height: 45%; z-index: 5; }
   }
   @media (prefers-reduced-motion: reduce) {
     .tile { transition: none; }
+    .tile.flash { animation: none; }
   }
 </style>
 
@@ -333,6 +389,7 @@
     <p style="margin:6px 0 0">Topics tile together like a disk-space map. A topic's area is its share of the work, so the biggest block is where most of your open tasks are. Each small cell inside is one task. The topics shown are sample placeholders.</p>
     <h3>Try it</h3>
     <ul>
+      <li>Start typing anywhere to add a task: <kbd>Call the bank @ Admin</kbd>. After <kbd>@</kbd>, pick a topic with <kbd>&uarr;</kbd> <kbd>&darr;</kbd> and <kbd>Tab</kbd></li>
       <li>Tick a task's checkbox; the map re-balances</li>
       <li>Click <kbd>+</kbd> on a topic to add tasks, <kbd>Enter</kbd> to keep adding</li>
       <li>Drag a topic's header onto another topic to group them</li>
@@ -351,6 +408,19 @@
       <li>Sync tasks with monday.com, or keep them local?</li>
     </ul>
   </aside>
+
+  <div class="quick" id="quick">
+    <div class="q-suggest" id="qSuggest" role="listbox" aria-label="Topics" hidden></div>
+    <div class="q-box">
+      <span class="q-plus" aria-hidden="true">+</span>
+      <input id="qInput" type="text" autocomplete="off" spellcheck="false"
+        placeholder="Start typing to add a task, e.g. Call the bank @ Admin"
+        role="combobox" aria-autocomplete="list" aria-controls="qSuggest" aria-expanded="false" aria-label="New task">
+      <kbd>Enter</kbd>
+    </div>
+    <div class="q-preview" id="qPreview" aria-live="polite"></div>
+  </div>
+  <div class="toast" id="toast" hidden></div>
 </div>
 
 <script>
@@ -796,6 +866,189 @@
     }
   }
 
+  /* ---------- Quick add: "Task name @ topic" ---------- */
+  const quick = document.getElementById("quick");
+  const qInput = document.getElementById("qInput");
+  const qSuggest = document.getElementById("qSuggest");
+  const qPreview = document.getElementById("qPreview");
+  const toast = document.getElementById("toast");
+  let qItems = [], qIndex = 0;
+
+  // Everything after the last "@" names the topic, so task names may still contain "@".
+  function parseQuick() {
+    const v = qInput.value, at = v.lastIndexOf("@");
+    return at < 0 ? { name: v.trim(), query: null } : { name: v.slice(0, at).trim(), query: v.slice(at + 1).trim() };
+  }
+  function topicMatches(q) {
+    const ql = q.toLowerCase();
+    const scored = [];
+    for (const t of data.topics) {
+      const g = groupOf(t.id);
+      const tl = t.title.toLowerCase(), gl = g ? g.name.toLowerCase() : "";
+      const score = !ql ? 1
+        : tl.startsWith(ql) ? 4
+        : tl.split(/[\s&/-]+/).some(w => w.startsWith(ql)) ? 3
+        : tl.includes(ql) ? 2
+        : gl.includes(ql) ? 1 : 0;
+      if (score) scored.push({ t, g, score });
+    }
+    scored.sort((a, b) => b.score - a.score || weightOf(b.t) - weightOf(a.t));
+    const items = scored.slice(0, 7);
+    if (q && !data.topics.some(t => t.title.toLowerCase() === ql)) items.push({ create: q });
+    return items;
+  }
+  function resolveTarget() {
+    const { query } = parseQuick();
+    if (query === null) {
+      const sel = selected != null && topicById(selected);
+      if (sel) return { t: sel };
+      const inbox = data.topics.find(t => t.title.toLowerCase() === "inbox");
+      return inbox ? { t: inbox } : { create: "Inbox" };
+    }
+    const exact = data.topics.find(t => t.title.toLowerCase() === query.toLowerCase());
+    if (exact) return { t: exact };
+    const item = qItems[qIndex];
+    if (item) return item.create ? { create: item.create } : { t: item.t };
+    return null;
+  }
+
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function highlightMatch(parent, text, q) {
+    const i = q ? text.toLowerCase().indexOf(q.toLowerCase()) : -1;
+    if (i < 0) { parent.textContent = text; return; }
+    parent.append(text.slice(0, i), el("mark", null, text.slice(i, i + q.length)), text.slice(i + q.length));
+  }
+
+  function updateQuick() {
+    const { name, query } = parseQuick();
+    const caretAfterAt = (qInput.selectionStart ?? qInput.value.length) > qInput.value.lastIndexOf("@");
+    const open = query !== null && document.activeElement === qInput && caretAfterAt;
+    qItems = open ? topicMatches(query) : [];
+    qIndex = Math.min(qIndex, Math.max(0, qItems.length - 1));
+    qSuggest.hidden = !open || !qItems.length;
+    qInput.setAttribute("aria-expanded", String(!qSuggest.hidden));
+    qSuggest.innerHTML = "";
+    if (!qSuggest.hidden) {
+      qSuggest.appendChild(el("div", "q-head", "Add to topic"));
+      qItems.forEach((it, i) => {
+        const row = el("div", "q-item" + (it.create ? " create" : ""));
+        row.setAttribute("role", "option");
+        row.id = "q-opt-" + i;
+        row.setAttribute("aria-selected", String(i === qIndex));
+        if (!it.create) row.style.setProperty("--accent", topicColor(it.t));
+        row.appendChild(el("span", "dot"));
+        const t = el("span", "t");
+        if (it.create) t.append("New topic ", el("b", null, `“${it.create}”`));
+        else highlightMatch(t, it.t.title, query);
+        row.appendChild(t);
+        if (!it.create && it.g) row.appendChild(el("span", "g", it.g.name));
+        row.addEventListener("pointerdown", (e) => e.preventDefault());
+        row.addEventListener("click", () => { qIndex = i; acceptSuggestion(); });
+        qSuggest.appendChild(row);
+      });
+      qInput.setAttribute("aria-activedescendant", "q-opt-" + qIndex);
+      const cur = qSuggest.querySelector('[aria-selected="true"]');
+      if (cur) cur.scrollIntoView({ block: "nearest" });
+    } else qInput.removeAttribute("aria-activedescendant");
+
+    // Plain-language preview of what Enter will do.
+    qPreview.innerHTML = "";
+    if (!name) {
+      qPreview.append("Type a task name, then ", el("b", null, "@"), " to choose a topic");
+      return;
+    }
+    const target = resolveTarget();
+    if (!target) { qPreview.append("Type a topic name after ", el("b", null, "@")); return; }
+    qPreview.append("Adds ", el("b", null, `“${name}”`), " to ");
+    if (target.t) {
+      const d = el("span", "dot"); d.style.setProperty("--accent", topicColor(target.t));
+      const g = groupOf(target.t.id);
+      qPreview.append(d, el("b", null, target.t.title), g ? ` in ${g.name}` : "");
+    } else {
+      qPreview.append("a new topic ", el("b", null, target.create));
+    }
+    if (query === null) qPreview.append(selected != null ? " (selected topic)" : "");
+  }
+
+  function acceptSuggestion() {
+    const it = qItems[qIndex];
+    if (!it) return;
+    const { name } = parseQuick();
+    qInput.value = `${name} @ ${it.create || it.t.title}`;
+    qIndex = 0;
+    updateQuick();
+  }
+
+  let toastTimer;
+  function showToast(text, t) {
+    toast.innerHTML = "";
+    const d = el("span", "dot"); d.style.setProperty("--accent", topicColor(t));
+    toast.append(d, text);
+    toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.hidden = true; }, 1800);
+  }
+
+  function submitQuick() {
+    const { name } = parseQuick();
+    const target = resolveTarget();
+    if (!name || !target) return;
+    let t = target.t;
+    if (!t) {
+      t = { id: nextId++, title: target.create, color: COLORS[(nextId - 2) % COLORS.length], tasks: [] };
+      data.topics.push(t);
+    }
+    t.tasks.push({ t: name, done: false });
+    save(); render();
+    const tile = mapEl.querySelector(`.tile[data-id="${t.id}"]`);
+    if (tile) { tile.classList.remove("flash"); void tile.offsetWidth; tile.classList.add("flash"); }
+    showToast(`Added to ${t.title}`, t);
+    // Keep the "@ topic" part so the next task goes to the same place.
+    const at = qInput.value.lastIndexOf("@");
+    qInput.value = at < 0 ? "" : " " + qInput.value.slice(at).replace(/^@\s*/, "@ ");
+    qInput.setSelectionRange(0, 0);
+    updateQuick();
+  }
+
+  qInput.addEventListener("focus", () => { quick.classList.add("active"); updateQuick(); });
+  qInput.addEventListener("blur", () => {
+    setTimeout(() => {
+      if (document.activeElement === qInput) return;
+      quick.classList.remove("active");
+      if (!parseQuick().name) qInput.value = "";
+      updateQuick();
+    }, 0);
+  });
+  qInput.addEventListener("input", () => { qIndex = 0; updateQuick(); });
+  qInput.addEventListener("click", updateQuick);
+  qInput.addEventListener("keyup", (e) => { if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Home" || e.key === "End") updateQuick(); });
+  qInput.addEventListener("keydown", (e) => {
+    const listOpen = !qSuggest.hidden;
+    if (listOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      qIndex = (qIndex + (e.key === "ArrowDown" ? 1 : -1) + qItems.length) % qItems.length;
+      updateQuick();
+    } else if (listOpen && e.key === "Tab") {
+      e.preventDefault(); acceptSuggestion();
+    } else if (e.key === "Enter") {
+      e.preventDefault(); submitQuick();
+    } else if (e.key === "Escape") {
+      e.preventDefault(); qInput.value = ""; qInput.blur();
+    }
+  });
+
+  // Any printable key typed while nothing else has focus starts a new task.
+  function startTyping(e) {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1 || e.key === " ") return false;
+    e.preventDefault();
+    closePicker();
+    qInput.value = e.key;
+    qInput.focus();
+    qInput.setSelectionRange(1, 1);
+    updateQuick();
+    return true;
+  }
+
   /* ---------- Group colour picker ---------- */
   let picker = null;
   function closePicker() {
@@ -891,7 +1144,7 @@
     const wide = window.innerWidth > 720;
     const topBar = Math.max(document.getElementById("brand").getBoundingClientRect().bottom,
                             document.getElementById("toolbar").getBoundingClientRect().bottom);
-    let left = 16, right = W - 16, top = (wide ? 72 : topBar + 12) + PATH_H, bottom = H - 16;
+    let left = 16, right = W - 16, top = (wide ? 72 : topBar + 12) + PATH_H, bottom = H - 72;
     if (wide && !listPanel.hidden) left = listPanel.getBoundingClientRect().right + 12;
     if (wide && !notesPanel.hidden) right = notesPanel.getBoundingClientRect().left - 12;
     return { left, top, w: Math.max(200, right - left), h: Math.max(160, bottom - top) };
@@ -1017,6 +1270,7 @@
 
   window.addEventListener("keydown", (e) => {
     if (e.target.closest("input, [contenteditable='true']")) return;
+    if (startTyping(e)) return;
     if ((e.key === "Delete" || e.key === "Backspace") && selected != null) {
       const id = selected;
       data.topics = data.topics.filter(t => t.id !== id);
